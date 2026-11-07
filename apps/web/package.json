@@ -1,0 +1,36 @@
+{
+  "name": "@slabguard/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "worker": "tsx scripts/worker.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@slabguard/core": "workspace:*",
+    "@supabase/supabase-js": "^2.81.1",
+    "jose": "^6.1.2",
+    "next": "16.4.5",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.16.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "stripe": "^19.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.6",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

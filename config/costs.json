@@ -1,0 +1,10 @@
+{
+  "_comment": "Estimated unit costs (USD) used for unit-economics reporting until providers' invoices are reconciled. Replace with measured values.",
+  "vision_cpu_second": 0.00005,
+  "ocr_call_local": 0,
+  "google_vision_web_detection": 0.0035,
+  "google_vision_text_detection": 0.0015,
+  "multimodal_ai_call": 0.01,
+  "storage_gb_month": 0.021,
+  "psa_api_call": 0
+}

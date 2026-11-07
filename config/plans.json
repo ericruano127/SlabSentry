@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "tagline": "Try the full workflow",
+      "rank": 0,
+      "monthlyAllowance": 0,
+      "lifetimeAllowance": 3,
+      "features": ["full_workflow", "cert_lookup", "basic_report", "history", "advanced_reference_comparison", "holder_security_analysis"],
+      "marketingBullets": [
+        "3 lifetime slab verifications",
+        "Full workflow incl. reference comparison & holder checks where supported",
+        "Certification lookup & basic fraud-risk report",
+        "Saved verification history",
+        "No credit card required"
+      ],
+      "prices": []
+    },
+    {
+      "id": "pro",
+      "name": "Collector Pro",
+      "tagline": "For active collectors",
+      "rank": 1,
+      "monthlyAllowance": 30,
+      "lifetimeAllowance": 0,
+      "features": ["full_workflow", "cert_lookup", "basic_report", "history", "advanced_reference_comparison", "holder_security_analysis", "reverse_image", "guided_refinement", "detailed_report", "pdf_export"],
+      "marketingBullets": [
+        "30 verifications per billing month",
+        "Advanced reference-image comparison",
+        "Holder-generation & security-feature analysis",
+        "Reverse-image checks where available",
+        "Guided photo refinement",
+        "Detailed fraud-risk reports & PDF export"
+      ],
+      "prices": [
+        { "id": "pro_month", "interval": "month", "amountCents": 999, "currency": "USD", "stripePriceId": null, "appleProductId": "slabguard.pro.monthly", "googleProductId": "slabguard_pro:monthly" },
+        { "id": "pro_year", "interval": "year", "amountCents": 9900, "currency": "USD", "stripePriceId": null, "appleProductId": "slabguard.pro.annual", "googleProductId": "slabguard_pro:annual" }
+      ]
+    },
+    {
+      "id": "power",
+      "name": "Power Collector",
+      "tagline": "For dealers & breakers",
+      "rank": 2,
+      "monthlyAllowance": 100,
+      "lifetimeAllowance": 0,
+      "features": ["full_workflow", "cert_lookup", "basic_report", "history", "advanced_reference_comparison", "holder_security_analysis", "reverse_image", "guided_refinement", "detailed_report", "pdf_export", "bulk_verification", "advanced_history_search", "scan_queue", "batch_pdf_export", "priority_processing"],
+      "marketingBullets": [
+        "100 verifications per billing month",
+        "Everything in Collector Pro",
+        "Bulk verification & multi-card scanning queue",
+        "Advanced history search",
+        "Batch PDF export",
+        "Priority processing when capacity permits"
+      ],
+      "prices": [
+        { "id": "power_month", "interval": "month", "amountCents": 1999, "currency": "USD", "stripePriceId": null, "appleProductId": "slabguard.power.monthly", "googleProductId": "slabguard_power:monthly" },
+        { "id": "power_year", "interval": "year", "amountCents": 19900, "currency": "USD", "stripePriceId": null, "appleProductId": "slabguard.power.annual", "googleProductId": "slabguard_power:annual" }
+      ]
+    }
+  ]
+}

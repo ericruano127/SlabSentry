@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "SlabGuard",
+    "slug": "slabguard",
+    "scheme": "slabguard",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.slabguard.app",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "SlabGuard uses the camera to photograph graded slabs for verification.",
+        "NSPhotoLibraryUsageDescription": "Choose saved photos of slabs or seller listings to verify."
+      }
+    },
+    "android": {
+      "package": "com.slabguard.app",
+      "permissions": ["CAMERA", "com.android.vending.BILLING"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-apple-authentication",
+      ["expo-image-picker", { "cameraPermission": "SlabGuard uses the camera to photograph graded slabs for verification." }]
+    ],
+    "extra": {
+      "apiUrl": "https://YOUR-WEB-DOMAIN",
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "revenuecatAppleKey": "",
+      "revenuecatGoogleKey": ""
+    }
+  }
+}

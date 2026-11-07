@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_HOST_AUTH_METHOD: trust, POSTGRES_DB: slabguard_test }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @slabguard/core test && pnpm -r typecheck
+      - run: |
+          cd services/vision && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+          .venv/bin/python -m pytest -q
+          .venv/bin/python -m tests.make_fixtures /tmp/fixtures
+          (.venv/bin/uvicorn app.main:app --port 8001 &) && sleep 5
+      - run: pnpm --filter @slabguard/web test
+        env: { FIXTURES_DIR: /tmp/fixtures, TEST_DATABASE_URL: "postgres://postgres@localhost:5432/slabguard_test" }

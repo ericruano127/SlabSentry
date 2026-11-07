@@ -1,0 +1,14 @@
+{
+  "name": "slabguard",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build:core": "pnpm --filter @slabguard/core build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:web": "pnpm --filter @slabguard/web dev",
+    "dev:vision": "cd services/vision && .venv/bin/uvicorn app.main:app --port 8001 --reload",
+    "worker": "pnpm --filter @slabguard/web worker",
+    "db:migrate": "pnpm --filter @slabguard/web db:migrate"
+  }
+}
