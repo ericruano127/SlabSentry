@@ -13,6 +13,10 @@ export default function Admin() {
   const [draft, setDraft] = useState("");
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const me = useApi<any>("/api/me");
+  const [roleForm, setRoleForm] = useState({ email: "", role: "analyst", reason: "" });
+  if (m.error?.body?.error === "mfa_required")
+    return <div className="banner warn">Staff tools require two-factor authentication. <a href="/account">Enable it in Account → Security</a>, then sign in again.</div>;
   if (m.error) return <div className="banner bad">{m.error.message}</div>;
   if (!m.data) return <p className="muted">Loading…</p>;
   const d = m.data;
@@ -46,6 +50,20 @@ export default function Admin() {
         }}>Save plans</button>
         {msg && <div className="banner">{msg}</div>}
       </section>
+      {me.data?.user.role === "owner" && (
+        <section className="card stack">
+          <h2>Staff roles</h2>
+          <p className="small muted">Least privilege: support (users, privacy requests), analyst (metrics, read plans), admin (plans, library), owner (roles). All staff need two-factor authentication. Changes are audited.</p>
+          <div className="row">
+            <input aria-label="User email" placeholder="user@example.com" value={roleForm.email} onChange={(e) => setRoleForm({ ...roleForm, email: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
+            <select aria-label="Role" value={roleForm.role} onChange={(e) => setRoleForm({ ...roleForm, role: e.target.value })} style={{ width: 140 }}>{["user", "support", "analyst", "admin", "owner"].map((r) => <option key={r}>{r}</option>)}</select>
+            <input aria-label="Reason" placeholder="Reason" value={roleForm.reason} onChange={(e) => setRoleForm({ ...roleForm, reason: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
+            <button className="btn" disabled={!roleForm.email || roleForm.reason.length < 3} onClick={async () => {
+              try { await api("/api/admin/users/role", { method: "PUT", json: roleForm }); setMsg(`Role updated: ${roleForm.email} → ${roleForm.role}`); } catch (e: any) { setMsg(e.message); }
+            }}>Set role</button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

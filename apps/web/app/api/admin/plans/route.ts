@@ -1,19 +1,19 @@
 import { PlanSchema } from "@slabguard/core";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/rbac";
 import { tx } from "@/lib/db";
 import { handle, HttpError, json } from "@/lib/http";
 import { loadPlans, upsertPlans } from "@/lib/plans";
 import { recomputeEntitlements } from "@/lib/billing/subscriptions";
 
 export const GET = handle(async (req: Request) => {
-  await requireAdmin(req);
+  await requirePermission(req, "plans:read");
   return json({ plans: await loadPlans() });
 });
 
 /** Edit plans/prices/allowances without code changes. Audited. Existing users' lifetime free grants are not changed. */
 export const PUT = handle(async (req: Request) => {
-  const admin = await requireAdmin(req);
+  const admin = await requirePermission(req, "plans:write");
   const { plans, reason } = z.object({ plans: z.array(PlanSchema).min(1), reason: z.string().min(3) }).parse(await req.json());
   if (!plans.some((p) => p.id === "free")) throw new HttpError(400, "free_required", "A free plan is required.");
   const before = await loadPlans();

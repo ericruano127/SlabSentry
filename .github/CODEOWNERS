@@ -1,0 +1,11 @@
+# Every change needs review from a code owner (enable "Require review from Code Owners" in branch protection).
+*                                   @ericruano127
+# Security-sensitive areas
+/apps/web/lib/auth.ts               @ericruano127
+/apps/web/lib/rbac.ts               @ericruano127
+/apps/web/lib/metadata.ts           @ericruano127
+/apps/web/lib/billing/              @ericruano127
+/apps/web/db/migrations/            @ericruano127
+/packages/core/src/holders/         @ericruano127
+/packages/core/src/risk/            @ericruano127
+/legal/                             @ericruano127

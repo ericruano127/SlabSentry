@@ -1,5 +1,8 @@
 import os
 import time
+
+# Decompression-bomb guard: must be set before OpenCV is imported.
+os.environ.setdefault("OPENCV_IO_MAX_IMAGE_PIXELS", str(60_000_000))
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 import base64
 from . import compare as cmp, holder, ocr, quality, seam, video

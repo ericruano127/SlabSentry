@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DEV_AUTH, devSignIn, supabase } from "@/lib/client/supabase";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
@@ -8,6 +8,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<{ tone: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mfa, setMfa] = useState<{ factorId: string } | null>(null);
+  const [code, setCode] = useState("");
   const sb = supabase();
   const next = typeof window !== "undefined" ? new URLSearchParams(location.search).get("next") ?? "/dashboard" : "/dashboard";
   const redirectTo = typeof window !== "undefined" ? `${location.origin}/auth/callback?next=${encodeURIComponent(mode === "signup" ? "/dashboard?welcome=1" : next)}` : undefined;
@@ -23,12 +25,38 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     } else {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) setMsg({ tone: "bad", text: error.message.includes("confirm") ? "Please verify your email first — check your inbox." : error.message });
-      else location.href = next;
+      else if (!(await needsMfa())) location.href = next;
     }
     setBusy(false);
   }
+  /** If the account has two-factor enabled, ask for the code before continuing (session becomes aal2). */
+  async function needsMfa() {
+    const { data } = await sb!.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (data?.nextLevel === "aal2" && data.currentLevel !== "aal2") {
+      const f = (await sb!.auth.mfa.listFactors()).data?.totp.find((x) => x.status === "verified");
+      if (f) { setMfa({ factorId: f.id }); return true; }
+    }
+    return false;
+  }
+  useEffect(() => { if (sb && new URLSearchParams(location.search).get("mfa") === "1") needsMfa(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const oauth = (provider: "google" | "apple") => sb?.auth.signInWithOAuth({ provider, options: { redirectTo } });
 
+  if (mfa) {
+    return (
+      <div className="card stack" style={{ maxWidth: 440, margin: "24px auto" }}>
+        <h1>Two-factor authentication</h1>
+        <p className="muted">Enter the 6-digit code from your authenticator app.</p>
+        <input aria-label="6-digit code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+        <button className="btn primary" disabled={code.length !== 6 || busy} onClick={async () => {
+          setBusy(true);
+          const { error } = await sb!.auth.mfa.challengeAndVerify({ factorId: mfa.factorId, code });
+          setBusy(false);
+          if (error) setMsg({ tone: "bad", text: "That code didn't work. Try the current code." }); else location.href = next;
+        }}>Verify</button>
+        {msg && <div className={`banner ${msg.tone}`}>{msg.text}</div>}
+      </div>
+    );
+  }
   return (
     <div className="card" style={{ maxWidth: 440, margin: "24px auto" }}>
       <h1>{mode === "signup" ? "Create your free account" : "Welcome back"}</h1>

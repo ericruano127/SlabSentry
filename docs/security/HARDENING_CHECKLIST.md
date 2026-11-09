@@ -1,0 +1,36 @@
+# Security Hardening Checklist (pre-launch)
+
+Items marked **(manual)** are account settings this repository cannot change itself.
+
+## Source code & deployment
+- [ ] **(manual)** GitHub: enable 2FA requirement for every account with access.
+- [ ] **(manual)** Branch protection on `main`: require PR, ≥1 approving review, **require review from Code Owners**, require status checks (`test`, `secret-scan`), dismiss stale approvals, no force-push, no deletion, include administrators.
+- [ ] **(manual)** Enable Dependabot alerts + security updates, secret scanning and push protection.
+- [x] CI: tests, `pnpm audit --audit-level=high`, `pip-audit`, gitleaks secret scan (`.github/workflows/ci.yml`).
+- [x] Dependabot version updates (`.github/dependabot.yml`), CODEOWNERS.
+- [ ] **(manual)** Production deploys only from `main` via the CI/CD pipeline, with required approval for the production environment.
+
+## Accounts & secrets
+- [ ] **(manual)** 2FA on Supabase, hosting, Stripe, RevenueCat, Apple Developer, Google Play Console, Google Cloud, Anthropic, domain registrar, email.
+- [ ] Secrets in the host's secret manager (e.g. Vercel/Fly secrets, AWS Secrets Manager, Doppler) — never in the repo (`.env*` is git-ignored; gitleaks scans history).
+- [ ] Separate projects/keys for development, staging and production; rotate keys on staff departure and at least yearly.
+- [x] Production startup refuses insecure config (`apps/web/lib/startup.ts`): dev auth, missing vision key/webhook secrets, non-TLS database, unreviewed legal text.
+
+## Application
+- [x] Metadata (EXIF/GPS/XMP/IPTC/video location) stripped losslessly before storage; existing files backfilled (`scripts/strip-existing-metadata.ts`).
+- [x] Upload type sniffing, size limits, pixel limits (decompression bombs), truncated-file rejection, trailing-data removal, video length limit.
+- [x] Staff RBAC (support / analyst / admin / owner) with mandatory 2FA (aal2); user 2FA optional but enforced server-side once enrolled.
+- [x] Row-level security on all tables; private storage; images served only to their owner; share links exclude photos and personal data.
+- [x] Rate limiting on create/upload/analyze/export/checkout; verified idempotent webhooks.
+- [x] Security headers: HSTS, CSP, frame-ancestors none, nosniff, referrer policy, permissions policy.
+- [ ] Tighten CSP with nonces (remove `'unsafe-inline'` for scripts).
+- [ ] Malware scanning for uploads if file types beyond images/videos are ever accepted (current types are decoded and re-validated).
+
+## Monitoring & response (Phase F completes)
+- [ ] Centralized logs with alerts on auth anomalies, 5xx spikes, webhook failures, admin/role changes.
+- [ ] Incident response plan reviewed with counsel (`INCIDENT_RESPONSE.md`); contacts filled in.
+
+## Before public launch
+- [ ] Third-party penetration test (web, API, mobile, storage permissions) and fix findings.
+- [ ] Legal review of all `legal/` documents; set `legal_review_status = 'approved'`.
+- [ ] Confirm encryption at rest for database, storage and backups in provider settings; document it.

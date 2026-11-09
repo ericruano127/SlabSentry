@@ -1,6 +1,16 @@
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
+
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
   test:
     runs-on: ubuntu-latest
     services:
@@ -17,9 +27,12 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.13" }
       - run: pnpm install --frozen-lockfile
+      - name: Dependency vulnerability scan (npm)
+        run: pnpm audit --audit-level=high --prod
       - run: pnpm --filter @slabguard/core test && pnpm -r typecheck
       - run: |
           cd services/vision && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install pip-audit && .venv/bin/pip-audit -r requirements.txt --strict
           .venv/bin/python -m pytest -q
           .venv/bin/python -m tests.make_fixtures /tmp/fixtures
           (.venv/bin/uvicorn app.main:app --port 8001 &) && sleep 5

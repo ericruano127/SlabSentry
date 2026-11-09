@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^1.6.0",
     "@slabguard/core": "workspace:*",
     "@supabase/supabase-js": "^2.81.1",
+    "fflate": "^0.8.3",
     "jose": "^6.1.2",
     "next": "16.4.5",
     "pdf-lib": "^1.17.1",

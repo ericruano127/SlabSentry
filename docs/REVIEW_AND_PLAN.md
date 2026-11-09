@@ -118,7 +118,7 @@ Status legend: ✅ addressed · 🟡 partial · ❌ missing. Nothing in this pla
 
 Each phase ends with tests, a versioned patch (public + internal changelog once Phase E exists) and a short results note. Order is by risk: live privacy exposure first, then the data foundation that the new checks depend on.
 
-**Phase A — Privacy, consent, security foundations**
+**Phase A — Privacy, consent, security foundations** ✅ done (2026-11-09) — see `docs/PHASE_A.md`
 1. Lossless metadata stripping on ingest (JPEG/PNG/WebP/video container metadata) before storage; keep only derived non-identifying signals needed for manipulation analysis (Phase C). Backfill-strip existing stored images.
 2. Consent: ToS / Privacy / training consent with versions and timestamps; onboarding gate (web + mobile); training opt-out without losing core features; per-image consent snapshot; audit trail table.
 3. CCPA/CPRA: data export (access request), deletion (exists), training opt-out; request log; retention job (configurable periods for originals, derived images, reports).

@@ -11,6 +11,7 @@ import { lookupCert, type LookupResult } from "./graders/lookup";
 import { webDetection } from "./reverse-image";
 import { distinctImages } from "@slabguard/core";
 import { activeImages, storeVideoFrames } from "./sessions";
+import { sanitize } from "./metadata";
 import { storage } from "./storage";
 import { vision } from "./vision";
 
@@ -45,8 +46,15 @@ async function fetchOfficialImage(session: any, side: "front" | "back", url: str
   if (existing) return existing;
   const r = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!r.ok) return null;
-  const data = Buffer.from(await r.arrayBuffer());
-  if (data.length > 20 * 1024 * 1024) return null;
+  const rawData = Buffer.from(await r.arrayBuffer());
+  if (rawData.length > 20 * 1024 * 1024) return null;
+  const mime = r.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
+  let data: Buffer;
+  try {
+    data = sanitize(rawData, ["image/png", "image/webp"].includes(mime) ? mime : "image/jpeg").data; // grader images are stripped too
+  } catch {
+    return null;
+  }
   const sha = createHash("sha256").update(data).digest("hex");
   const key = `${session.user_id}/${session.id}/official/${side}-${sha.slice(0, 16)}.jpg`;
   await storage.put(key, data, r.headers.get("content-type") ?? "image/jpeg");

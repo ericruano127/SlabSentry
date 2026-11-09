@@ -1,19 +1,33 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, Linking, Platform, ScrollView } from "react-native";
+import { Alert, Linking, Platform, ScrollView, Switch, View } from "react-native";
+import { config } from "../lib/config";
 import { api, type Me } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { Button, Card, T } from "../lib/ui";
 
 export default function Account() {
-  const [me, setMe] = useState<Me | null>(null);
-  useEffect(() => { api<Me>("/api/me").then(setMe); }, []);
+  const [me, setMe] = useState<(Me & { consent?: any }) | null>(null);
+  const load = () => api<Me>("/api/me").then(setMe);
+  useEffect(() => { load(); }, []);
   const u = me?.usage;
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
       <Card>
         <T bold>{me?.user.email}</T>
         {u && <T>{u.planName}{u.subscriptionProvider ? ` · via ${{ stripe: "web", app_store: "App Store", play_store: "Google Play", manual: "admin" }[u.subscriptionProvider]}` : ""}</T>}
+      </Card>
+      <Card>
+        <T bold>Privacy</T>
+        <T muted size={13}>Location and camera details are removed from every photo on upload. We don't sell or share your data.</T>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Switch value={!!me?.consent?.training.granted} accessibilityLabel="Use my uploads to improve detection" onValueChange={async (v) => {
+            try { await api("/api/consent", { method: "PATCH", headers: { "x-client": "mobile" }, json: { training: v } }); load(); } catch (e: any) { Alert.alert("Privacy", e.message); }
+          }} />
+          <View style={{ flex: 1 }}><T size={14}>Use my future uploads to improve counterfeit detection (optional)</T></View>
+        </View>
+        <Button title="Download my data (opens website)" onPress={() => Linking.openURL(`${config.apiUrl}/account#privacy`)} />
+        <Button title="Privacy Policy" onPress={() => Linking.openURL(`${config.apiUrl}/legal/privacy`)} />
       </Card>
       <Button title="Plans & restore purchases" onPress={() => router.push("/paywall")} />
       {u?.subscriptionProvider && u.subscriptionProvider !== "stripe" && <Button title="Manage store subscription" onPress={() => Linking.openURL(Platform.OS === "ios" ? "https://apps.apple.com/account/subscriptions" : "https://play.google.com/store/account/subscriptions")} />}

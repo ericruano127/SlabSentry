@@ -21,6 +21,7 @@ export async function migrate({ seedPlans = true } = {}) {
     });
     console.log("applied", f);
   }
+  await seedLegalDocuments();
   await tx(async (c) => {
     // Plans: inserted from config only if missing (admins may have edited them since). PLANS_FORCE_SYNC=1 overwrites.
     const existing = (await c.query(`select count(*)::int n from subscription_plans`)).rows[0].n;
@@ -33,4 +34,27 @@ export async function migrate({ seedPlans = true } = {}) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   migrate().then(() => pool.end()).catch((e) => (console.error(e), process.exit(1)));
+}
+
+/** Load legal/*.md (front matter: version, title, requires_acceptance) as published document versions.
+ * Existing versions are never overwritten — changing text requires a new version (re-acceptance). */
+export async function seedLegalDocuments() {
+  const legalDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../legal");
+  const kinds: Record<string, string> = { "terms.md": "terms", "privacy.md": "privacy", "training-consent.md": "training_consent", "data-collection.md": "data_collection" };
+  for (const [f, kind] of Object.entries(kinds)) {
+    let raw: string;
+    try { raw = readFileSync(path.join(legalDir, f), "utf8"); } catch { continue; }
+    const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    if (!m) throw new Error(`legal/${f}: missing front matter`);
+    const meta = Object.fromEntries(m[1].split("\n").map((l) => l.split(/:\s*/, 2)));
+    const r = await pool.query(
+      `insert into legal_documents (kind,version,title,body_md,requires_acceptance,published) values ($1,$2,$3,$4,$5,true)
+       on conflict (kind,version) do nothing returning version`,
+      [kind, meta.version, meta.title, m[2].trim(), kind === "terms" || kind === "privacy" ? meta.requires_acceptance !== "false" : false],
+    );
+    if (!r.rowCount) {
+      const existing = await pool.query(`select body_md from legal_documents where kind=$1 and version=$2`, [kind, meta.version]);
+      if (existing.rows[0]?.body_md !== m[2].trim()) console.warn(`legal/${f}: text changed but version ${meta.version} already exists — bump the version to publish it`);
+    }
+  }
 }

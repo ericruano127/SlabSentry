@@ -35,7 +35,7 @@ export default function Dashboard() {
         {usage.planId !== "power" && <Link className="btn" href="/pricing">Upgrade plan</Link>}
         <Link className="btn" href="/history?download=1">Download reports</Link>
         {usage.features.includes("bulk_verification") && <Link className="btn" href="/bulk">Bulk queue</Link>}
-        {user.isAdmin && <Link className="btn" href="/admin">Admin</Link>}
+        {(user as any).isStaff && <Link className="btn" href="/admin">Staff tools</Link>}
       </div>
       <section className="card">
         <div className="row spread"><h2>Recent verifications</h2><Link href="/history" className="small">All</Link></div>

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { pool, q } from "../lib/db";
 import { migrate } from "../scripts/migrate";
 import { ensureUser } from "../lib/users";
+import { acceptConsent, consentStatus } from "../lib/consent";
 
 export async function resetDb() {
   await pool.query(`drop schema public cascade; create schema public;`);
@@ -9,10 +10,22 @@ export async function resetDb() {
   await q(`update subscription_prices set stripe_price_id = 'price_' || id`);
 }
 
-export async function newUser() {
+/** New user who has accepted the current Terms + Privacy (pass consent=false for a fresh, un-consented user). */
+export async function newUser(consent = true) {
   const id = randomUUID();
   await ensureUser(id, `${id.slice(0, 6)}@example.com`);
+  if (consent) {
+    const st = await consentStatus(id);
+    await acceptConsent(id, { terms: st.terms.current!, privacy: st.privacy.current! }, "system");
+  }
   return id;
+}
+
+/** Call a route handler as a dev-auth user. */
+export function req(url: string, userId: string, init: RequestInit & { json?: unknown; aal2?: boolean } = {}) {
+  const headers: Record<string, string> = { "x-dev-user": userId, ...(init.aal2 ? { "x-dev-aal": "aal2" } : {}), ...(init.headers as any) };
+  if (init.json !== undefined) headers["content-type"] = "application/json";
+  return new Request(`http://test${url}`, { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : init.body });
 }
 
 export async function newSession(userId: string, mode = "in_hand") {

@@ -20,8 +20,10 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
   if (init.json !== undefined) (headers["Content-Type"] = "application/json"), (body = JSON.stringify(init.json));
   const r = await fetch(path, { ...init, headers, body, credentials: "same-origin" });
   if (r.status === 401 && typeof window !== "undefined" && !path.startsWith("/api/plans")) {
-    window.location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+    const body = await r.clone().json().catch(() => null);
+    window.location.href = `/login?${body?.error === "mfa_challenge_required" ? "mfa=1&" : ""}next=${encodeURIComponent(location.pathname)}`;
   }
+  if (r.status === 428 && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("consent-required"));
   const ct = r.headers.get("content-type") ?? "";
   const data = ct.includes("json") ? await r.json() : await r.blob();
   if (!r.ok) throw new ApiError(r.status, data);

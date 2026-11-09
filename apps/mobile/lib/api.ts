@@ -10,7 +10,7 @@ export class ApiError extends Error {
 
 export async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
-  const headers: Record<string, string> = { ...(init.headers as any) };
+  const headers: Record<string, string> = { "x-client": "mobile", ...(init.headers as any) };
   if (data.session) headers.Authorization = `Bearer ${data.session.access_token}`;
   let body = init.body;
   if (init.json !== undefined) (headers["Content-Type"] = "application/json"), (body = JSON.stringify(init.json));

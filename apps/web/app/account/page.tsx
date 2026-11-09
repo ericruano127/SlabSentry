@@ -3,12 +3,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { CreditSummary } from "@/components/CreditSummary";
 import { fmtDate } from "@/components/ui";
-import { api } from "@/lib/client/api";
+import { api, download } from "@/lib/client/api";
+import { MfaSettings } from "@/components/MfaSettings";
 import { useApi, type Me } from "@/lib/client/hooks";
 import { devSignOut, supabase } from "@/lib/client/supabase";
 
 export default function Account() {
-  const me = useApi<Me>("/api/me");
+  const me = useApi<Me & { user: { role: string; isStaff: boolean; mfa: boolean }; consent: any }>("/api/me");
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   if (!me.data) return <p className="muted">Loading…</p>;
@@ -42,8 +43,24 @@ export default function Account() {
         )}
         {msg && <div className="banner bad">{msg}</div>}
       </section>
+      <section className="card stack" id="privacy">
+        <h2>Privacy</h2>
+        <p className="small muted">Location and camera details are removed from every photo when you upload it. We don't sell or share your personal information.</p>
+        <label className="row" style={{ fontWeight: 400, alignItems: "flex-start" }}>
+          <input type="checkbox" style={{ width: 22, minHeight: 22, marginTop: 2 }} checked={!!me.data.consent?.training.granted} onChange={async (e) => {
+            try { await api("/api/consent", { method: "PATCH", json: { training: e.target.checked } }); me.reload(); } catch (err: any) { setMsg(err.message); }
+          }} />
+          <span>Use my future uploads to improve counterfeit detection. <Link href="/legal/training-consent">Details</Link>. Turning this off never limits features.</span>
+        </label>
+        <div className="row">
+          <button className="btn" onClick={() => download("/api/account/export", "slabguard-data.zip").catch((e) => setMsg(e.message))}>Download my data</button>
+          <Link className="btn" href="/legal/privacy">Privacy Policy</Link>
+        </div>
+        <p className="small muted">Accepted Terms v{me.data.consent?.terms.accepted ?? "—"} · Privacy v{me.data.consent?.privacy.accepted ?? "—"}</p>
+      </section>
       <section className="card stack">
         <h2>Security</h2>
+        <MfaSettings required={!!me.data.user.isStaff} />
         <div className="row"><Link className="btn" href="/reset-password">Change password</Link><button className="btn" onClick={async () => { await supabase()?.auth.signOut({ scope: "global" }); devSignOut(); location.href = "/login"; }}>Sign out of all devices</button></div>
       </section>
       <section className="card stack">

@@ -9,7 +9,7 @@ import { subscriptionGrantsAccess } from "@slabguard/core";
 
 /** Permanently delete the account, photos and reports. Store subscriptions must be canceled in the store. */
 export const DELETE = handle(async (req: Request) => {
-  const u = await requireUser(req);
+  const u = await requireUser(req, { skipConsent: true });
   const body = await req.json().catch(() => ({}));
   if (body.confirm !== "DELETE") throw new HttpError(400, "confirm_required", 'Type DELETE to confirm.');
   const active = (await loadSubscriptions(u.id)).filter((s) => subscriptionGrantsAccess(s, new Date()) && !["canceled"].includes(s.status));
@@ -20,6 +20,7 @@ export const DELETE = handle(async (req: Request) => {
   }
   await storage.removePrefix(u.id);
   await tx(async (c) => {
+    await c.query(`insert into privacy_requests (user_id,kind,status,completed_at) values ($1,'deletion','completed',now())`, [u.id]);
     // Billing/payment rows are retained (user_id nulled) for accounting; everything else cascades.
     await c.query(`update payments set user_id=null where user_id=$1`, [u.id]);
     await c.query(`update billing_events set user_id=null where user_id=$1`, [u.id]);

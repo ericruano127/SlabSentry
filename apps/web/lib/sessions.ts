@@ -3,6 +3,7 @@ import { one, q } from "./db";
 import { env } from "./env";
 import { HttpError } from "./http";
 import { storage } from "./storage";
+import { MetadataError, sanitize, type MetadataSignals } from "./metadata";
 import { vision, VisionUnavailable } from "./vision";
 
 export const ROLES = ["front", "back", "label_closeup", "security_closeup", "edge", "tilt_frame", "tilt_video", "backlit", "detail", "reference_front", "reference_back"] as const;
@@ -24,21 +25,37 @@ function sniffMime(b: Buffer): string | null {
   return null;
 }
 
-export async function addImage(userId: string, sessionId: string, role: Role, data: Buffer, opts: { attestation?: string } = {}) {
-  const mime = sniffMime(data);
+export const MAX_VIDEO_SECONDS = 20;
+
+export async function addImage(userId: string, sessionId: string, role: Role, raw: Buffer, opts: { attestation?: string } = {}) {
+  const mime = sniffMime(raw);
   const isVideo = !!mime?.startsWith("video/");
   if (role === "tilt_video" ? !isVideo : !mime || isVideo) throw new HttpError(415, "unsupported_type", role === "tilt_video" ? "Please upload an MP4, MOV or WebM video." : "Please upload a JPEG, PNG or WebP photo.");
-  if (data.length > (isVideo ? env.maxVideoBytes : env.maxUploadBytes)) throw new HttpError(413, "too_large", isVideo ? "Video is too large (max 60 MB, keep it under 10 seconds)." : "Image is too large (max 15 MB).");
+  if (raw.length > (isVideo ? env.maxVideoBytes : env.maxUploadBytes)) throw new HttpError(413, "too_large", isVideo ? "Video is too large (max 60 MB, keep it under 10 seconds)." : "Image is too large (max 15 MB).");
   const count = await one(`select count(*)::int n from submitted_images where session_id=$1 and is_original`, [sessionId]);
   if (count.n >= env.maxImagesPerSession) throw new HttpError(429, "too_many_images", "This session has reached its photo limit.");
   const isRef = role.startsWith("reference_");
   if (isRef && !opts.attestation) throw new HttpError(400, "attestation_required", "Tell us where this reference image came from.");
+
+  // Privacy: strip EXIF/GPS/XMP and other identifying metadata BEFORE anything is analyzed or stored.
+  let data: Buffer;
+  let metadataSignals: MetadataSignals;
+  try {
+    ({ data, signals: metadataSignals } = sanitize(raw, mime!));
+  } catch (e) {
+    if (e instanceof MetadataError)
+      throw new HttpError(e.code === "too_many_pixels" ? 413 : 422, e.code === "too_many_pixels" ? "too_many_pixels" : "unreadable_image",
+        e.code === "too_many_pixels" ? e.message : "That file looks damaged or incomplete. Please take or choose another photo.");
+    throw e;
+  }
+  const consent = await one(`select training_consent, training_consent_version from app_users where id=$1`, [userId]);
 
   let quality: any = null;
   let frames: { t: number; jpeg: string }[] = [];
   try {
     if (isVideo) {
       const r = await vision.frames(data);
+      if (r.durationSec > MAX_VIDEO_SECONDS) throw new HttpError(422, "video_too_long", `Please keep tilt videos under ${MAX_VIDEO_SECONDS} seconds.`);
       frames = r.frames;
       const ok = r.status === "ok";
       quality = { ok, score: ok ? 1 : 0.4, metrics: { durationSec: r.durationSec, distinctFrames: r.distinctFrames, sampled: r.sampled },
@@ -57,8 +74,10 @@ export async function addImage(userId: string, sessionId: string, role: Role, da
     ? { source: "user_supplied_reference", retrievedAt: new Date().toISOString(), note: opts.attestation }
     : { source: "user_capture", retrievedAt: new Date().toISOString() };
   const row = await one(
-    `insert into submitted_images (session_id,user_id,role,storage_key,mime,bytes,sha256,quality,provenance) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id, role, quality, created_at`,
-    [sessionId, userId, role, key, mime, data.length, sha, quality && JSON.stringify(quality), JSON.stringify(provenance)],
+    `insert into submitted_images (session_id,user_id,role,storage_key,mime,bytes,sha256,quality,provenance,metadata_signals,training_consent,consent_version)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id, role, quality, created_at`,
+    [sessionId, userId, role, key, mime, data.length, sha, quality && JSON.stringify(quality), JSON.stringify(provenance), JSON.stringify(metadataSignals),
+     !!consent?.training_consent, consent?.training_consent ? consent.training_consent_version : null],
   );
   await storeVideoFrames(userId, sessionId, row.id, frames);
   if (isRef) {
@@ -70,7 +89,7 @@ export async function addImage(userId: string, sessionId: string, role: Role, da
 }
 
 export async function activeImages(sessionId: string) {
-  return q(`select * from submitted_images where session_id=$1 and is_original and not superseded order by created_at`, [sessionId]);
+  return q(`select * from submitted_images where session_id=$1 and is_original and not superseded and purged_at is null order by created_at`, [sessionId]);
 }
 
 /** Free pre-analysis gate: blocks only clearly unusable sets so users aren't charged for them. */
@@ -91,7 +110,8 @@ export async function storeVideoFrames(userId: string, sessionId: string, videoI
     const fsha = createHash("sha256").update(fb).digest("hex");
     const fkey = `${userId}/${sessionId}/derived/tiltframe-${fsha.slice(0, 16)}.jpg`;
     await storage.put(fkey, fb, "image/jpeg");
-    await q(`insert into submitted_images (session_id,user_id,role,is_original,derived_from,storage_key,mime,bytes,sha256,provenance) values ($1,$2,'tilt_frame',false,$3,$4,'image/jpeg',$5,$6,$7)`,
+    await q(`insert into submitted_images (session_id,user_id,role,is_original,derived_from,storage_key,mime,bytes,sha256,provenance,training_consent,consent_version)
+             select $1,$2,'tilt_frame',false,$3,$4,'image/jpeg',$5,$6,$7, p.training_consent, p.consent_version from submitted_images p where p.id=$3`,
       [sessionId, userId, videoId, fkey, fb.length, fsha, JSON.stringify({ source: "computed", tool: "vision/video", note: `frame ${i + 1} at ${f.t}s`, retrievedAt: new Date().toISOString() })]);
   }
 }

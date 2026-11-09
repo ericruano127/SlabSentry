@@ -5,7 +5,8 @@ import { env } from "./env";
 
 /** Private image storage. Supabase Storage (private bucket) when configured, local disk otherwise. */
 interface Store {
-  put(key: string, data: Buffer, mime: string): Promise<void>;
+  put(key: string, data: Buffer, mime: string, opts?: { overwrite?: boolean }): Promise<void>;
+  remove(key: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   removePrefix(prefix: string): Promise<void>;
 }
@@ -17,6 +18,7 @@ const local: Store = {
     await writeFile(p, data);
   },
   get: (key) => readFile(safe(key)),
+  remove: (key) => rm(safe(key), { force: true }),
   removePrefix: (prefix) => rm(safe(prefix), { recursive: true, force: true }),
 };
 
@@ -28,8 +30,12 @@ function safe(key: string) {
 
 let sb: SupabaseClient | null = null;
 const supa: Store = {
-  async put(key, data, mime) {
-    const { error } = await client().storage.from(env.storageBucket).upload(key, data, { contentType: mime, upsert: false });
+  async put(key, data, mime, opts) {
+    const { error } = await client().storage.from(env.storageBucket).upload(key, data, { contentType: mime, upsert: !!opts?.overwrite });
+    if (error) throw error;
+  },
+  async remove(key) {
+    const { error } = await client().storage.from(env.storageBucket).remove([key]);
     if (error) throw error;
   },
   async get(key) {
