@@ -9,3 +9,5 @@ __pycache__
 .pgdata
 *.tsbuildinfo
 .expo
+*.zip
+*.bundle
