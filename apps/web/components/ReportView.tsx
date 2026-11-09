@@ -1,5 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
+import { api } from "@/lib/client/api";
 import { AuthImage } from "./AuthImage";
 import { ASSESS, fmtDate, Pill, STATUS } from "./ui";
 
@@ -25,7 +27,37 @@ function ObsRow({ o, privateImages }: { o: Obs; privateImages: boolean }) {
   );
 }
 
-export function ReportView({ report, privateImages = true, history }: { report: any; privateImages?: boolean; history?: { analysis_run: number; assessment: string; evidence: string; created_at: string }[] }) {
+const PM: Record<string, { label: string; tone: string }> = {
+  supported: { label: "Physical-copy match supported", tone: "ok" },
+  not_established: { label: "Physical-copy match not established", tone: "warn" },
+  conflicting: { label: "Physical characteristics conflict", tone: "bad" },
+};
+const ROLE_LABEL: Record<string, string> = { front: "Front photo", back: "Back photo", label_closeup: "Label close-up", backlit: "Backlit label", tilt_video: "Tilt video", edge: "Edge close-ups", reference_front: "Reference image" };
+
+function Narrative({ report, sessionId, canNarrate }: { report: any; sessionId?: string; canNarrate?: boolean }) {
+  const [n, setN] = useState<any>(report.narrative ?? null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!sessionId && !report.narrative) return null;
+  return (
+    <section className="card" aria-labelledby="ai-summary">
+      <div className="row spread"><h2 id="ai-summary">Plain-language explanation</h2>{n && <span className="pill">{n.source === "ai" ? "AI-assisted" : "Rule-based summary"}</span>}</div>
+      {n ? (
+        <>
+          {n.text.split(/\n\n+/).map((p: string, i: number) => <p key={i}>{p}</p>)}
+          <p className="small muted">{n.source === "ai" ? "Written by an AI model from the findings above. It explains the evidence; it cannot change findings or the assessment." : "Generated from the rules engine's findings."}</p>
+        </>
+      ) : canNarrate && sessionId ? (
+        <button className="btn" disabled={busy} onClick={async () => { setBusy(true); setErr(null); try { setN((await api(`/api/sessions/${sessionId}/narrative`, { method: "POST" })).narrative); } catch (e: any) { setErr(e.message); } finally { setBusy(false); } }}>{busy ? "Writing…" : "Explain this report"}</button>
+      ) : (
+        <p className="small muted">AI-assisted explanations are included with <Link href="/pricing">Collector Pro</Link>.</p>
+      )}
+      {err && <div className="banner bad">{err}</div>}
+    </section>
+  );
+}
+
+export function ReportView({ report, privateImages = true, history, sessionId, canNarrate }: { report: any; privateImages?: boolean; history?: { analysis_run: number; assessment: string; evidence: string; created_at: string }[]; sessionId?: string; canNarrate?: boolean }) {
   const e = report.engine;
   const a = ASSESS[e.assessment];
   const id = report.identification;
@@ -49,6 +81,42 @@ export function ReportView({ report, privateImages = true, history }: { report: 
         </div>
         {e.evidenceQuality.reasons.length > 0 && <ul className="small" style={{ margin: "8px 0 0" }}>{e.evidenceQuality.reasons.map((r: string) => <li key={r}>{r}</li>)}</ul>}
       </div>
+
+      {sessionId && e.retakeRequests?.length > 0 && (
+        <section className="card" aria-labelledby="improve">
+          <h2 id="improve">Improve this report</h2>
+          <p className="small muted">These captures would resolve open questions. Adding them and re-analyzing this slab uses no extra credit.</p>
+          {e.retakeRequests.map((r: any) => (
+            <div key={r.role + r.reason} className="row spread" style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ flex: 1, minWidth: 220 }}><strong>{ROLE_LABEL[r.role] ?? r.role}</strong><div className="small">{r.reason}</div><div className="small muted">{r.guidance}</div></div>
+              <Link className="btn" href={`/scan?session=${sessionId}&role=${r.role}`}>Add</Link>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {report.interpretation?.length > 0 && (
+        <section className="card"><h2>What the evidence shows</h2><ul>{report.interpretation.map((l: string) => <li key={l} style={{ marginBottom: 6 }}>{l}</li>)}</ul></section>
+      )}
+
+      {e.physicalMatch?.length > 0 && (
+        <section className="card" aria-labelledby="pm">
+          <h2 id="pm">Same physical card?</h2>
+          <p className="small muted">Identical artwork is not enough: an exact-copy match requires at least two independent physical characteristics that agree with the reference and none that conflict.</p>
+          {e.physicalMatch.map((pm: any) => (
+            <div key={pm.side} style={{ marginTop: 10 }}>
+              <div className="row"><strong style={{ textTransform: "capitalize" }}>{pm.side}</strong><Pill tone={PM[pm.verdict].tone}>{PM[pm.verdict].label}</Pill></div>
+              <div className="grid grid-3 small" style={{ marginTop: 8 }}>
+                <div><div className="muted">Matching</div>{pm.matching.length ? pm.matching.map((m: string) => <div key={m}>✓ {m}</div>) : "—"}</div>
+                <div><div className="muted">Conflicting</div>{pm.conflicting.length ? pm.conflicting.map((m: string) => <div key={m} style={{ color: "var(--bad)" }}>✗ {m}</div>) : "—"}</div>
+                <div><div className="muted">Inconclusive</div>{pm.inconclusive.length ? pm.inconclusive.map((m: string) => <div key={m}>? {m}</div>) : "—"}</div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <Narrative report={report} sessionId={sessionId} canNarrate={canNarrate} />
 
       <section className="card">
         <h2>Recommended next action</h2>
@@ -107,7 +175,7 @@ export function ReportView({ report, privateImages = true, history }: { report: 
             <tbody>{history.map((h) => <tr key={h.analysis_run}><td>{h.analysis_run}</td><td>{ASSESS[h.assessment]?.label}</td><td>{h.evidence}</td><td>{fmtDate(h.created_at)}</td></tr>)}</tbody></table>
         </section>
       )}
-      <p className="small muted">{report.disclaimer} · {e.rulesVersion} · Generated {fmtDate(report.generatedAt)}</p>
+      <p className="small muted">{report.disclaimer} · {e.rulesVersion}{report.holderLibraryVersion ? ` · holder library ${report.holderLibraryVersion}` : ""} · Generated {fmtDate(report.generatedAt)}</p>
     </div>
   );
 }

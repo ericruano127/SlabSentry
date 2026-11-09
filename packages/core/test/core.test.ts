@@ -104,3 +104,76 @@ describe("entitlements", () => {
     expect(computeEntitlements([sub({ status: "refunded" })], plans, new Date("2026-02-10T00:00:00Z")).planId).toBe("free");
   });
 });
+
+describe("phase 2 rules", () => {
+  const fp = (o: Partial<NonNullable<ComparisonResult["fingerprint"]>> = {}) => ({
+    lowResolution: false,
+    marks: { status: "consistent" as const, unmatched: 0 },
+    edgeProfile: { status: "consistent" as const, correlation: 0.8 },
+    registration: { status: "consistent" as const, deltaPx: 0.2 },
+    ...o,
+  });
+  const run = (r: Partial<ComparisonResult>, src: "official_api" | "user_supplied_reference" = "official_api", over: Partial<EngineInput> = {}) =>
+    runEngine(base({ comparisons: [{ side: "front", referenceSource: src, result: baseCmp(r) }], ...over }));
+
+  it("supports an exact physical match only with ≥2 agreeing copy-level signals", () => {
+    expect(run({ fingerprint: fp() }).physicalMatch[0].verdict).toBe("supported");
+    // design + centering alone (no fingerprint) is not enough
+    expect(run({}).physicalMatch[0].verdict).toBe("not_established");
+  });
+
+  it("identical artwork never implies a physical match", () => {
+    const pm = run({ centering: { status: "inconclusive" }, fingerprint: fp({ marks: { status: "inconclusive" }, edgeProfile: { status: "inconclusive" } }) }).physicalMatch[0];
+    expect(pm.verdict).toBe("not_established");
+    expect(pm.summary).toMatch(/not established/);
+  });
+
+  it("unique marks alone: conflicting, but moderate severity", () => {
+    const out = run({ fingerprint: fp({ marks: { status: "potential_discrepancy", unmatched: 5 } }) });
+    expect(out.physicalMatch[0].verdict).toBe("conflicting");
+    const f = out.findings.find((x) => x.pattern === "different_physical_card")!;
+    expect(f.severity).toBe("medium");
+    expect(f.legitimateExplanations.join()).toMatch(/Dust/);
+    expect(run({ fingerprint: fp({ marks: { status: "potential_discrepancy" } }) }, "user_supplied_reference").findings.find((x) => x.pattern === "different_physical_card")!.severity).toBe("low");
+  });
+
+  it("two strong conflicts with official images are high risk", () => {
+    const out = run({ fingerprint: fp({ marks: { status: "potential_discrepancy" }, edgeProfile: { status: "potential_discrepancy" } }) });
+    expect(out.assessment).toBe("high_risk_inconsistencies");
+  });
+
+  it("registration alone (weak signal) does not create a conflict", () => {
+    const out = run({ fingerprint: fp({ registration: { status: "potential_discrepancy", deltaPx: 3 } }) });
+    expect(out.physicalMatch[0].verdict).not.toBe("conflicting");
+    expect(out.findings.some((f) => f.pattern === "different_physical_card")).toBe(false);
+  });
+
+  it("label differing from the official image's label flags a label swap", () => {
+    const out = run({ labelComparison: { status: "potential_discrepancy", certConflict: true } });
+    const f = out.findings.find((x) => x.pattern === "label_modification_possible")!;
+    expect(f.severity).toBe("high");
+  });
+
+  it("near-duplicate photos don't add evidence and trigger a retake request", () => {
+    const qh = (h: string) => ({ ...q, metrics: { phash: h } });
+    const out = runEngine(base({ images: [{ id: "a", role: "front", quality: qh("ffff0000ffff0000") }, { id: "b", role: "back", quality: qh("ffff0000ffff0001") }] }));
+    expect(out.duplicates).toEqual([{ id: "b", role: "back", duplicateOf: "front" }]);
+    expect(out.retakeRequests[0].role).toBe("back");
+    expect(out.evidenceQuality.reasons.join()).toMatch(/near-duplicates/);
+  });
+
+  it("asks for specific retakes for glare and low resolution", () => {
+    const out = run({ localDifferences: { status: "inconclusive", flaggedRegions: [], glareMaskedPct: 20, comparableAreaPct: 30 }, fingerprint: fp({ lowResolution: true, marks: { status: "inconclusive" } }) });
+    const reasons = out.retakeRequests.map((r) => r.reason).join(" | ");
+    expect(reasons).toMatch(/Glare hid 20%/);
+    expect(reasons).toMatch(/too small/);
+    expect(out.retakeRequests.every((r) => r.guidance.length > 10)).toBe(true);
+  });
+
+  it("edge anomalies are surfaced for review but never as a discrepancy", () => {
+    const out = runEngine(base({ edgeReviews: [{ imageId: "e1", status: "inconclusive", anomalies: 2, regions: [] }] }));
+    const o = out.observations.find((x) => x.id === "tamper.edge.0")!;
+    expect(o.status).toBe("inconclusive");
+    expect(out.findings.some((f) => f.pattern === "case_alteration_possible")).toBe(false);
+  });
+});

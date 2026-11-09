@@ -20,9 +20,11 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
   return out as T;
 }
 
-export async function uploadPhoto(sessionId: string, role: string, uri: string, attestation?: string) {
+export async function uploadPhoto(sessionId: string, role: string, uri: string, attestation?: string, mimeType?: string) {
   const fd = new FormData();
-  fd.append("file", { uri, name: `${role}.jpg`, type: "image/jpeg" } as any);
+  const isVideo = role === "tilt_video";
+  const type = mimeType ?? (isVideo ? "video/mp4" : "image/jpeg");
+  fd.append("file", { uri, name: `${role}.${isVideo ? (type.includes("quicktime") ? "mov" : "mp4") : "jpg"}`, type } as any);
   fd.append("role", role);
   if (attestation) fd.append("attestation", attestation);
   return api(`/api/sessions/${sessionId}/images`, { method: "POST", body: fd });

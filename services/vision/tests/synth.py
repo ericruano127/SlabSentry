@@ -22,7 +22,7 @@ def artwork(seed=1, w=900, h=1260):
     return img
 
 
-def card(art, cut_dx=0, cut_dy=0, border=60, marks_seed=None):
+def card(art, cut_dx=0, cut_dy=0, border=60, marks_seed=None, chip_seed=None):
     """Print artwork on a sheet then cut a card; cut offset changes centering."""
     h, w = art.shape[:2]
     sheet = np.full((h + 4 * border, w + 4 * border, 3), 250, np.uint8)
@@ -35,6 +35,15 @@ def card(art, cut_dx=0, cut_dy=0, border=60, marks_seed=None):
         for _ in range(10):
             p = rng.integers(100, [c.shape[1] - 100, c.shape[0] - 100])
             cv2.line(c, tuple(int(v) for v in p), tuple(int(v) for v in p + rng.integers(-60, 60, 2)), (0, 0, 0), 3)
+    if chip_seed is not None:  # edge wear: irregular bites along the cut edges
+        rng = np.random.default_rng(chip_seed)
+        H, W = c.shape[:2]
+        for _ in range(60):
+            side = rng.integers(0, 4)
+            t = rng.uniform(0.1, 0.9)
+            r = int(rng.integers(3, 9))
+            x, y = [(int(t * W), 0), (W - 1, int(t * H)), (int(t * W), H - 1), (0, int(t * H))][side]
+            cv2.circle(c, (x, y), r, (205, 205, 205), -1)
     return c
 
 

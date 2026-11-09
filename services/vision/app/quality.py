@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from . import geometry
 from .imaging import glare_mask
+from .hashing import phash
 
 GUIDANCE = {
     "blur": "Image is blurry. Hold steady, tap to focus on the label, and brace your elbows.",
@@ -52,7 +53,7 @@ def assess(img: np.ndarray, role: str) -> dict:
     elif glare > 0.04:
         add("glare", "minor")
 
-    metrics = {"sharpness": round(sharp, 1), "meanLuma": round(mean, 1), "glareFrac": round(glare, 4), "width": w, "height": h}
+    metrics = {"phash": format(phash(img), "016x"), "sharpness": round(sharp, 1), "meanLuma": round(mean, 1), "glareFrac": round(glare, 4), "width": w, "height": h}
     if role in ROLE_NEEDS_FULL_SLAB and not role.startswith("reference"):
         q = geometry.find_slab(img) or geometry.find_card(img)
         metrics["subjectDetected"] = q is not None

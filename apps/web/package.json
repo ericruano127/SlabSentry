@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@slabguard/core": "workspace:*",
     "@supabase/supabase-js": "^2.81.1",
     "jose": "^6.1.2",

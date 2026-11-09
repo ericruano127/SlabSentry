@@ -10,7 +10,7 @@ const STEPS: Step[] = [
   { role: "front", title: "Front of slab", hint: "Whole slab, all four edges in frame, straight on, no glare." },
   { role: "back", title: "Back of slab", hint: "Flip the slab. Same framing." },
   { role: "label_closeup", title: "Label close-up", hint: "Fill the frame with the label; number and QR sharp." },
-  { role: "tilt_frame", title: "Tilt sequence (optional)", hint: "3–5 label photos while gently tilting under one light.", optional: true, multiple: true },
+  { role: "tilt_video", title: "Tilt video (optional)", hint: "Record 3–5 seconds slowly tilting the label (~30°) under one light. We pick distinct, sharp frames.", optional: true },
   { role: "backlit", title: "Backlit label (optional, PSA)", hint: "Light behind the label, same framing as the close-up.", optional: true },
   { role: "edge", title: "Holder edges (optional)", hint: "Close-ups of the holder sides and seams.", optional: true, multiple: true },
   { role: "reference_front", title: "Reference image (optional)", hint: "If the grader's cert page shows images, add the front image. It will be labeled user-supplied — never as retrieved from the grader. (PSA images are fetched automatically when our PSA integration is enabled.)", optional: true },
@@ -21,7 +21,7 @@ const askAttestation = () => new Promise<string | null>((resolve) =>
 
 export default function Scan() {
   const t = useTheme();
-  const params = useLocalSearchParams<{ session?: string }>();
+  const params = useLocalSearchParams<{ session?: string; role?: string }>();
   const [mode, setMode] = useState<"in_hand" | "online_listing" | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(params.session ?? null);
   const [i, setI] = useState(0);
@@ -31,7 +31,11 @@ export default function Scan() {
   const [cert, setCert] = useState("");
   const [phase, setPhase] = useState<"capture" | "confirm" | "analyze">("capture");
 
-  useEffect(() => { if (params.session) setMode("in_hand"); }, [params.session]);
+  useEffect(() => {
+    if (params.session) setMode("in_hand");
+    const i = STEPS.findIndex((st) => st.role === params.role);
+    if (i >= 0) setI(i);
+  }, [params.session, params.role]);
 
   async function start(m: "in_hand" | "online_listing") {
     const r = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode: m } });
@@ -42,7 +46,10 @@ export default function Scan() {
   async function capture(step: Step, fromLibrary: boolean) {
     const attestation = step.role.startsWith("reference") ? await askAttestation() : undefined;
     if (attestation === null) return;
-    const opts: ImagePicker.ImagePickerOptions = { quality: 0.92, exif: false, allowsMultipleSelection: step.multiple && fromLibrary };
+    const isVideo = step.role === "tilt_video";
+    const opts: ImagePicker.ImagePickerOptions = isVideo
+      ? { mediaTypes: ["videos"], videoMaxDuration: 6, videoQuality: ImagePicker.UIImagePickerControllerQualityType.High }
+      : { quality: 0.92, exif: false, allowsMultipleSelection: step.multiple && fromLibrary };
     if (!fromLibrary) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) return Alert.alert("Camera", "Camera permission is needed to photograph the slab. You can also choose a saved photo.");
@@ -52,7 +59,7 @@ export default function Scan() {
     setBusy(true);
     try {
       for (const a of res.assets) {
-        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation);
+        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation, a.mimeType ?? undefined);
         setShots((s) => ({ ...s, [step.role]: [...(step.multiple ? s[step.role] ?? [] : []), { uri: a.uri, quality: r.image.quality }] }));
       }
     } catch (e: any) {
@@ -128,11 +135,12 @@ export default function Scan() {
       <Card style={{ gap: 10 }}>
         <T size={18} bold>{step.title}</T>
         <T muted>{step.hint}</T>
-        {last && <Image source={{ uri: last.uri }} style={{ width: "100%", height: 260, borderRadius: 10 }} resizeMode="contain" accessibilityLabel={`${step.title} preview`} />}
+        {last && step.role === "tilt_video" && <T color={last.quality?.ok ? t.ok : t.warn}>{last.quality?.ok ? `✓ ${last.quality.metrics?.distinctFrames} distinct frames extracted` : "Uploaded"}</T>}
+        {last && step.role !== "tilt_video" && <Image source={{ uri: last.uri }} style={{ width: "100%", height: 260, borderRadius: 10 }} resizeMode="contain" accessibilityLabel={`${step.title} preview`} />}
         {last?.quality?.issues?.map((q: any) => <T key={q.issue} color={q.severity === "major" ? t.bad : t.warn}>{q.severity === "major" ? "Retake needed: " : "Tip: "}{q.guidance}</T>)}
         {last?.quality?.ok && !last.quality.issues.length && <T color={t.ok}>✓ Photo looks good</T>}
-        {mode === "in_hand" && !step.role.startsWith("reference") && <Button primary={!last} title={last ? (step.multiple ? `Add another (${mine.length})` : "Retake") : "Take photo"} onPress={() => capture(step, false)} busy={busy} />}
-        <Button title={mode === "in_hand" ? "Choose from library" : "Upload seller photo"} onPress={() => capture(step, true)} busy={busy} />
+        {mode === "in_hand" && !step.role.startsWith("reference") && <Button primary={!last} title={last ? (step.multiple ? `Add another (${mine.length})` : "Retake") : step.role === "tilt_video" ? "Record video" : "Take photo"} onPress={() => capture(step, false)} busy={busy} />}
+        <Button title={step.role === "tilt_video" ? "Choose video" : mode === "in_hand" ? "Choose from library" : "Upload seller photo"} onPress={() => capture(step, true)} busy={busy} />
       </Card>
       <T muted size={13}>Never bend, open, heat or scrape a slab. Photos and retakes don't use credits.</T>
       <View style={{ flexDirection: "row", gap: 10 }}>

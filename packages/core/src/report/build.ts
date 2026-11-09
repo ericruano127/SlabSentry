@@ -1,5 +1,6 @@
 import { GRADERS, officialLookupUrl } from "../graders/registry";
 import type { EngineInput, EngineOutput } from "../risk/engine";
+import { HOLDER_LIBRARY_VERSION } from "../holders/library";
 import type { GraderId, OfficialCertRecord, OverallAssessment, VerificationMode } from "../types";
 
 export const ASSESSMENT_LABELS: Record<OverallAssessment, { title: string; tone: "ok" | "warn" | "bad" | "muted" }> = {
@@ -32,7 +33,29 @@ export interface VerificationReport {
   };
   engine: EngineOutput;
   assessmentLabel: string;
+  /** Deterministic plain-language interpretation of the evidence layers. */
+  interpretation: string[];
+  holderLibraryVersion: string;
+  /** Optional AI-written explanation; never changes findings or assessment. */
+  narrative?: { text: string; source: "ai" | "template"; model?: string; generatedAt: string; analysisRun?: number };
   disclaimer: string;
+}
+
+/** Layer-by-layer reading of the evidence, written by rules (no model involved). */
+export function interpret(input: EngineInput, out: EngineOutput): string[] {
+  const lines: string[] = [];
+  const r = input.record;
+  if (r?.found) lines.push(`Certification: the grader's record for cert ${input.certNumber} was found${r.grade ? ` (grade ${r.grade})` : ""}. This confirms the number exists — not that this slab is the one it was issued to.`);
+  else if (r?.found === false) lines.push(`Certification: no record was found for cert ${input.certNumber}.`);
+  else lines.push("Certification: the official record was not checked automatically; confirm it on the grader's site.");
+  for (const pm of out.physicalMatch) lines.push(pm.summary);
+  if (!input.comparisons.length) lines.push("Reference comparison: no reference image was available, so the physical card could not be compared with the grader's imaging.");
+  const holder = out.observations.filter((o) => o.category === "security_feature" || o.category === "tampering" || o.category === "holder");
+  const bad = holder.filter((o) => o.status === "potential_discrepancy").length;
+  const ok = holder.filter((o) => o.status === "consistent").length;
+  lines.push(`Holder: ${ok} visible check(s) consistent with documented design, ${bad} potential discrepanc${bad === 1 ? "y" : "ies"}, ${holder.length - ok - bad} not assessable from photos.`);
+  lines.push(`Evidence quality is ${out.evidenceQuality.level}${input.mode === "online_listing" ? "; seller photos cannot show possession or liveness" : ""}.`);
+  return lines;
 }
 
 export function buildReport(sessionId: string, input: EngineInput, out: EngineOutput): VerificationReport {
@@ -56,6 +79,8 @@ export function buildReport(sessionId: string, input: EngineInput, out: EngineOu
     },
     engine: out,
     assessmentLabel: ASSESSMENT_LABELS[out.assessment].title,
+    interpretation: interpret(input, out),
+    holderLibraryVersion: HOLDER_LIBRARY_VERSION,
     disclaimer: REPORT_DISCLAIMER,
   };
 }

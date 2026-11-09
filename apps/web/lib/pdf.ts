@@ -42,6 +42,18 @@ export async function renderReportsPdf(items: { report: VerificationReport; over
       page.drawImage(im, { x: 40, y: y - h, width: w, height: h });
       y -= h + 10;
     }
+    if ((r as any).interpretation?.length) {
+      line("What the evidence shows", { size: 12, f: bold });
+      for (const l of (r as any).interpretation as string[]) line(`• ${l}`);
+    }
+    for (const pm of r.engine.physicalMatch ?? []) {
+      line(`Same physical card (${pm.side}): ${pm.verdict.replace("_", " ")}`, { f: bold });
+      line(`Matching: ${pm.matching.join(", ") || "none"} | Conflicting: ${pm.conflicting.join(", ") || "none"} | Inconclusive: ${pm.inconclusive.join(", ") || "none"}`, { indent: 12, size: 9 });
+    }
+    if (r.narrative) {
+      line(r.narrative.source === "ai" ? "Plain-language explanation (AI-assisted; cannot change findings)" : "Summary", { size: 12, f: bold });
+      for (const para of r.narrative.text.split(/\n\n+/)) line(para);
+    }
     if (r.engine.findings.length) {
       line("Risk findings", { size: 12, f: bold });
       for (const f of r.engine.findings) {
@@ -54,6 +66,10 @@ export async function renderReportsPdf(items: { report: VerificationReport; over
     for (const o of r.engine.observations) line(`${STATUS_LABEL[o.status]} — ${o.title} (${o.basis}): ${o.detail}`, { size: 9 });
     line("Recommended next actions", { size: 12, f: bold });
     for (const a of r.engine.nextActions) line(`• ${a}`);
+    if (r.engine.retakeRequests?.length) {
+      line("Captures that would improve this report", { size: 12, f: bold });
+      for (const t of r.engine.retakeRequests) line(`• ${t.reason} ${t.guidance}`);
+    }
     y -= 6;
     line(r.disclaimer, { size: 8, color: [0.4, 0.4, 0.45] });
     line(`Rules ${r.engine.rulesVersion}`, { size: 8, color: [0.4, 0.4, 0.45] });

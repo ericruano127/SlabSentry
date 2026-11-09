@@ -107,7 +107,7 @@ export interface QualityReport {
   ok: boolean;
   score: number; // 0..1 overall usability for inspection
   issues: { issue: QualityIssue; severity: "minor" | "major"; guidance: string }[];
-  metrics: Record<string, number | boolean>;
+  metrics: Record<string, number | boolean | string>; // includes phash (hex) for near-duplicate detection
 }
 
 /** Output contract of the vision service /compare endpoint (subset used by the rules). */
@@ -127,7 +127,52 @@ export interface ComparisonResult {
     comparableAreaPct: number;
   };
   overlays: { sideBySide?: string; diffHeatmap?: string; aligned?: string }; // stored image ids
+  /** Phase 2 copy-level signals (absent when design did not align). */
+  fingerprint?: {
+    lowResolution: boolean;
+    cardWidthPx?: Record<string, number>;
+    marks: { status: CheckStatus; unmatched?: number; onlyInUpload?: Region[]; onlyInReference?: Region[]; note?: string };
+    edgeProfile: { status: CheckStatus; correlation?: number; note?: string };
+    registration: { status: CheckStatus; deltaPx?: number; note?: string };
+  };
+  /** Label in your photo vs label visible in the reference image. */
+  labelComparison?: { status: CheckStatus; certConflict?: boolean; tokenOverlap?: number; missingFromUpload?: string[]; extraInUpload?: string[]; note?: string };
+  diagnostics?: { cardDetected?: { upload: boolean; reference: boolean } };
   toolVersion: string;
+}
+
+export interface EdgeReviewResult {
+  imageId: string;
+  status: CheckStatus;
+  anomalies?: number;
+  regions?: Region[];
+  note?: string;
+}
+
+export interface TiltVideoResult {
+  videoId: string;
+  durationSec: number;
+  sampled: number;
+  distinctFrames: number;
+  status: "ok" | "too_few_distinct_frames";
+}
+
+export interface RetakeRequest {
+  role: string; // capture role to add/retake
+  reason: string; // what is uncertain
+  guidance: string; // how to capture it
+  resolves: string[]; // observation ids this would help resolve
+  priority: 1 | 2 | 3;
+}
+
+export type PhysicalMatchVerdict = "supported" | "not_established" | "conflicting";
+export interface PhysicalMatch {
+  side: "front" | "back";
+  verdict: PhysicalMatchVerdict;
+  matching: string[];
+  conflicting: string[];
+  inconclusive: string[];
+  summary: string;
 }
 
 export interface HolderInspectionResult {

@@ -16,11 +16,11 @@ what they mean. Originals are never modified.
 from __future__ import annotations
 import cv2
 import numpy as np
-from . import geometry
+from . import fingerprint as fp, geometry, label
 from .hashing import phash, hamming
 from .imaging import glare_mask, to_png_b64
 
-TOOL_VERSION = "vision/compare@0.1.0"
+TOOL_VERSION = "vision/compare@0.2.0"
 CANON_W, CANON_H = 500, 700
 GRID = (6, 8)  # cols, rows
 
@@ -132,7 +132,7 @@ def _local_differences(a_bgr, b_bgr, valid):
     return scores, flagged, comparable
 
 
-def compare(upload: np.ndarray, reference: np.ndarray) -> dict:
+def compare(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[str] | None = None) -> dict:
     out = {
         "toolVersion": TOOL_VERSION,
         "designMatch": {"status": "inconclusive", "inliers": 0, "inlierRatio": 0.0},
@@ -166,6 +166,7 @@ def compare(upload: np.ndarray, reference: np.ndarray) -> dict:
         hc = hamming(phash(cu), phash(cr))
     out["photoReuse"] = {"hammingFull": hf, "hammingCard": hc, "nearIdentical": hf <= PHOTO_REUSE_HAMMING}
 
+    out["labelComparison"] = label.compare_labels(upload, reference, upload_label_text)
     if dm["status"] != "consistent" or qr is None:
         return out
 
@@ -206,12 +207,23 @@ def compare(upload: np.ndarray, reference: np.ndarray) -> dict:
     else:
         ld["status"] = "consistent"
 
-    out["overlays"] = _overlays(up_in_ref, ref_card, scores, flagged)
+    # Phase 2: physical-copy fingerprint at higher resolution (artwork-aligned frame).
+    side = lambda q: int(round(float(np.linalg.norm(q.pts[1] - q.pts[0]))))
+    card_px = {"upload": side(qu) if qu is not None else 0, "reference": side(qr)}
+    ref_fp, Mfp = geometry.warp(reference, qr.pts, fp.FP_W, fp.FP_H)
+    up_fp_own = geometry.warp(upload, qu.pts, fp.FP_W, fp.FP_H)[0] if qu is not None else None
+    out["fingerprint"] = fp.fingerprint(upload, Mfp @ H, ref_fp, up_fp_own, glare_mask, card_px)
+    mk = out["fingerprint"].get("marks", {})
+    out["overlays"] = _overlays(up_in_ref, ref_card, scores, flagged, mk.get("onlyInUpload", []) + mk.get("onlyInReference", []))
     return out
 
 
-def _overlays(up, ref, scores, flagged):
+def _overlays(up, ref, scores, flagged, marks=()):
     side = np.hstack([up, np.full((CANON_H, 12, 3), 255, np.uint8), ref])
+    for m in marks:  # unique marks: magenta circles on the image where they appear
+        dx = 0 if m["label"] == "onlyInUpload" else CANON_W + 12
+        cx, cy = int((m["x"] + m["w"] / 2) * CANON_W) + dx, int((m["y"] + m["h"] / 2) * CANON_H)
+        cv2.circle(side, (cx, cy), 12, (255, 0, 255), 2)
     for f in flagged:
         for dx in (0, CANON_W + 12):
             x, y = int(f["x"] * CANON_W) + dx, int(f["y"] * CANON_H)

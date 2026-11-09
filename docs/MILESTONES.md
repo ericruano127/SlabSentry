@@ -21,13 +21,23 @@
 4. Legal: Terms, Privacy, auto-renew disclosures, data retention policy (default: originals 12 months, configurable job).
 5. Observability: error tracking, job queue metrics, webhook failure alerts.
 
-## Phase 2 — Advanced verification
-- Live in-app camera with real-time framing guidance and short tilt video capture (frame extraction)
-- Print-dot / holo-pattern fingerprinting at high resolution; learned embeddings for card ID
-- Segmentation model for holder/label/card; grader logo classifier; label typography model per generation
-- Expanded holder library (BGS, SGC, TAG, AGS) with official sources
-- Bulk verification queue UI for Power plan; multimodal AI narration constrained to evidence
-- Calibrated risk score only after labeled evaluation
+## Phase 2 — Advanced verification ✅ (implemented; accuracy still to be measured on real data)
+- [x] **Exact-card fingerprint v2**: unique-mark correspondence (localized, circled in overlays), edge & corner wear profile, print colour registration, at high resolution with automatic "inconclusive" below 600 px card width
+- [x] **Transparent physical-match rule**: "supported" only with ≥2 agreeing strong signals and no conflicts; identical artwork never counts; per-side matching / conflicting / inconclusive lists
+- [x] **Tampering analysis**: label vs. label in the reference image (label-swap indicator, tolerant to OCR segmentation); holder edge/seam close-up review (anomalies highlighted for review, never a verdict)
+- [x] **Guided tilt video**: web live recorder (MediaRecorder) and mobile video capture → server picks distinct sharp frames (pHash de-dup); static videos rejected before analysis at no cost
+- [x] **Live camera with real-time framing guidance** (web): on-device focus / exposure / glare checks, capture enabled when steady
+- [x] **Adaptive retake requests** tied to the specific open checks, deep-linked into the scan flow (free re-analysis); near-duplicate photos never add evidence
+- [x] **Improved interpretation**: deterministic layer-by-layer summary; **AI-assisted explanation** (Pro+, Claude via Anthropic SDK) constrained to the structured report, validated (no authenticity claims, assessment restated) with rule-based fallback
+- [x] **Power plan bulk queue** (multi-card scanning, one credit per slab, stops cleanly at the limit)
+- [x] Versioned library recorded in every report (`holderLibraryVersion`, `rules-0.2.0`, `vision/compare@0.2.0`)
+
+### Phase 2 items deliberately not done (need data or permissions)
+- Official reference images beyond PSA — no authorized programmatic source identified for CGC/BGS/SGC/TAG/AGS
+- Segmentation model, grader-logo classifier, label-typography model, card embeddings — require a labeled dataset
+- Holder library entries for BGS/SGC/TAG/AGS — official documentation not yet found; kept as "research needed"
+- Mobile live framing guidance (mobile uses the system camera); holofoil pattern fingerprinting
+- Calibrated risk score — only after labeled evaluation (see TESTING.md)
 
 ## Phase 3 — Growth
 Additional graders, trusted expert review marketplace, marketplace integrations, seller verification flows, privacy-safe suspicious-listing reporting, fraud education/alerts, portfolio integration.

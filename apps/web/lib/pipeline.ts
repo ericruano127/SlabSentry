@@ -9,7 +9,8 @@ import { consumeCredit, entitlementsFor, releaseCredit } from "./credits";
 import { recordCost } from "./costs";
 import { lookupCert, type LookupResult } from "./graders/lookup";
 import { webDetection } from "./reverse-image";
-import { activeImages } from "./sessions";
+import { distinctImages } from "@slabguard/core";
+import { activeImages, storeVideoFrames } from "./sessions";
 import { storage } from "./storage";
 import { vision } from "./vision";
 
@@ -72,13 +73,21 @@ export async function runAnalysis(sessionId: string) {
 
   // Re-check quality for images uploaded while the vision service was unavailable.
   for (const img of images.filter((i) => !i.quality)) {
-    img.quality = await vision.quality(await load(img), img.role);
+    if (img.role === "tilt_video") {
+      const r = await vision.frames(await load(img));
+      await storeVideoFrames(session.user_id, sessionId, img.id, r.frames);
+      img.quality = { ok: r.status === "ok", score: 1, issues: [], metrics: { durationSec: r.durationSec, distinctFrames: r.distinctFrames, sampled: r.sampled } };
+    } else img.quality = await vision.quality(await load(img), img.role);
     await q(`update submitted_images set quality=$2 where id=$1`, [img.id, JSON.stringify(img.quality)]);
   }
 
   // ---- 1. Holder inspection (cached by input hashes so retakes rerun only what changed)
   const label = byRole("label_closeup")[0];
-  const tilt = byRole("tilt_frame");
+  // Tilt evidence: photo frames + frames extracted from the latest tilt video; near-duplicates removed
+  // so a static sequence can't pose as several independent observations.
+  const video = byRole("tilt_video")[0];
+  const videoFrames = video ? await q(`select * from submitted_images where derived_from=$1 and role='tilt_frame' order by created_at`, [video.id]) : [];
+  const tilt = [...distinctImages(byRole("tilt_frame")).kept, ...videoFrames].slice(0, 12);
   const backlit = byRole("backlit")[0];
   const holderKey = [front, label, backlit, ...tilt].filter(Boolean).map((i) => i.sha256).join(":");
   let holder: HolderInspectionResult | null = (await one(`select data from verification_evidence where session_id=$1 and kind='holder' and data->>'inputKey'=$2 order by created_at desc limit 1`, [sessionId, holderKey]))?.data ?? null;
@@ -130,7 +139,7 @@ export async function runAnalysis(sessionId: string) {
     let result: ComparisonResult;
     if (prev) result = prev.result;
     else {
-      const raw: any = await vision.compare(await load(up), await load(ref.img));
+      const raw: any = await vision.compare(await load(up), await load(ref.img), side === "front" ? holder.ocrText : undefined);
       await recordCost(sessionId, session.user_id, "vision_cpu_second", (raw.elapsedMs ?? 0) / 1000);
       const ov: Record<string, string> = {};
       for (const [k, v] of Object.entries<string | undefined>(raw.overlays ?? {})) if (v) ov[k] = await storeDerived(session, up, `overlay_${side}_${k}`, v, raw.toolVersion);
@@ -139,6 +148,18 @@ export async function runAnalysis(sessionId: string) {
     await q(`insert into image_comparisons (session_id,analysis_run,side,upload_image_id,reference_image_id,result,tool_version) values ($1,$2,$3,$4,$5,$6,$7)`, [sessionId, run, side, up.id, ref.img.id, JSON.stringify(result), result.toolVersion]);
     comparisons.push({ side, referenceSource: ref.source, result });
   }
+
+  // ---- 5b. Holder edge / seam close-ups (cached per image)
+  const edgeReviews: EngineInput["edgeReviews"] = [];
+  for (const img of byRole("edge").slice(0, 6)) {
+    const prev = await one(`select data from verification_evidence where session_id=$1 and kind='edge_review' and data->>'imageId'=$2 order by created_at desc limit 1`, [sessionId, img.id]);
+    const r = prev?.data ?? { ...(await vision.edge(await load(img))), imageId: img.id };
+    if (!prev) await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,'edge_review',$3,$4)`, [sessionId, run, JSON.stringify(r), JSON.stringify({ source: "computed", tool: "vision/seam", retrievedAt: new Date().toISOString() })]);
+    edgeReviews.push(r);
+  }
+  const tiltVideo: EngineInput["tiltVideo"] = video?.quality?.metrics
+    ? { videoId: video.id, durationSec: video.quality.metrics.durationSec, sampled: video.quality.metrics.sampled, distinctFrames: video.quality.metrics.distinctFrames, status: video.quality.ok ? "ok" : "too_few_distinct_frames" }
+    : undefined;
 
   // ---- 6. Reverse image search (entitlement + configuration gated)
   let reverseImage: EngineInput["reverseImage"] = { status: hasFeature(ent, "reverse_image") ? "not_configured" : "not_entitled", samePhotoUrls: [], similarUrls: [] };
@@ -158,8 +179,8 @@ export async function runAnalysis(sessionId: string) {
   const input: EngineInput = {
     mode: session.mode, grader, certNumber: cert, certSource, certUserConfirmed: session.cert_confirmed,
     record: lookup?.record ?? null, labelOcrText: holder.ocrText,
-    images: images.filter((i) => !i.role.startsWith("reference_")).map((i) => ({ id: i.id, role: i.role, quality: i.quality as QualityReport })),
-    comparisons, holder, reverseImage,
+    images: images.filter((i) => !i.role.startsWith("reference_") && i.role !== "tilt_video").map((i) => ({ id: i.id, role: i.role, quality: i.quality as QualityReport })),
+    comparisons, holder, reverseImage, edgeReviews, tiltVideo,
   };
   const out = runEngine(input);
   const report = buildReport(sessionId, input, out);

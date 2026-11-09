@@ -45,5 +45,8 @@ AUTH_MODE=dev is ignored when `NODE_ENV=production`.
 3. Webhook → `https://<domain>/api/webhooks/revenuecat` with an Authorization header value; set `REVENUECAT_WEBHOOK_AUTH` to the same exact value, and `REVENUECAT_SECRET_API_KEY` (server reconciliation is the source of truth).
 4. Sandbox: Apple sandbox testers / Play license testers. Sandbox events are ignored in production unless `ALLOW_SANDBOX_PURCHASES=1`.
 
+### AI explanations (optional, Pro+)
+Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, default `claude-opus-5-5`). Requests send the structured report only, use the server-side refusal fallback (`fallbacks: "default"`), and are validated before display; without a key users get the rule-based summary. Token costs are recorded as `ai_narrative` in `processing_costs`.
+
 ### Security checklist
 Private storage only; images served to owner via API · RLS enabled on all tables (no PostgREST access) · server never trusts client plan/credit values · webhook signatures/secrets verified, idempotent processing · rate limits on create/upload/analyze/checkout · upload size/type sniffing · admin actions audited · account deletion removes photos and auth user (payments kept with user unlinked for accounting).

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useApi, type Me } from "@/lib/client/hooks";
+import { LiveCamera } from "./LiveCamera";
 import { UpgradePrompt } from "./ui";
 
 type Img = { id: string; role: string; quality: { ok: boolean; issues: { issue: string; severity: string; guidance: string }[] } | null };
@@ -17,7 +18,8 @@ const SECURITY_TIPS: Record<string, string[]> = {
 };
 
 /** Downscale only very large photos (keeps originals whenever they fit the upload limit). */
-async function prepare(file: File): Promise<Blob> {
+async function prepare(file: Blob): Promise<Blob> {
+  if (file.type.startsWith("video/")) return file;
   if (file.size <= 14 * 1024 * 1024 && /jpe?g|png|webp/.test(file.type)) return file;
   const bmp = await createImageBitmap(file);
   const s = Math.min(1, 3200 / Math.max(bmp.width, bmp.height));
@@ -26,27 +28,36 @@ async function prepare(file: File): Promise<Blob> {
   return new Promise((r) => c.toBlob((b) => r(b!), "image/jpeg", 0.92));
 }
 
-function Capture({ label, hint, role, multiple, onUpload, images, attestation, inHand }: { label: string; hint: string; role: string; multiple?: boolean; onUpload: (role: string, f: File, att?: string) => Promise<void>; images: Img[]; attestation?: string; inHand: boolean }) {
+function Capture({ label, hint, role, multiple, onUpload, images, attestation, inHand, highlight }: { label: string; hint: string; role: string; multiple?: boolean; onUpload: (role: string, f: Blob, att?: string, name?: string) => Promise<void>; images: Img[]; attestation?: string; inHand: boolean; highlight?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState(false);
+  const isVideo = role === "tilt_video";
+  const canLive = inHand && !role.startsWith("reference") && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
   const mine = images.filter((i) => i.role === role);
   const last = mine[mine.length - 1];
   return (
-    <div className={`capture ${mine.length ? "has" : ""}`}>
+    <div className={`capture ${mine.length ? "has" : ""}`} style={highlight ? { borderColor: "var(--accent)", borderStyle: "solid" } : undefined}>
+      {live && <LiveCamera mode={isVideo ? "video" : "photo"} label={label} onClose={() => setLive(false)} onCapture={async (b, name) => { setLive(false); setBusy(true); try { await onUpload(role, b, attestation, name); } finally { setBusy(false); } }} />}
       <h3>{label}</h3>
       <p className="small muted">{hint}</p>
-      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" capture={inHand && !role.startsWith("reference") ? "environment" : undefined} multiple={multiple} hidden
+      <input ref={ref} type="file" accept={isVideo ? "video/mp4,video/quicktime,video/webm" : "image/jpeg,image/png,image/webp"} capture={inHand && !role.startsWith("reference") ? "environment" : undefined} multiple={multiple} hidden
         onChange={async (e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = "";
           setBusy(true);
           try { for (const f of files) await onUpload(role, f, attestation); } finally { setBusy(false); }
         }} />
-      <button className="btn" onClick={() => ref.current?.click()} disabled={busy || (role.startsWith("reference") && !attestation)}>
-        {busy ? "Checking photo…" : mine.length ? (multiple ? `Add more (${mine.length})` : "Retake") : inHand && !role.startsWith("reference") ? "Take photo" : "Upload photo"}
-      </button>
-      {last?.quality && (last.quality.ok && !last.quality.issues.length ? <p className="small" style={{ color: "var(--ok)", marginTop: 8 }}>✓ Photo looks good</p> :
+      <div className="row" style={{ justifyContent: "center" }}>
+        {canLive && <button className="btn primary" disabled={busy} onClick={() => setLive(true)}>{isVideo ? "Record tilt video" : mine.length && !multiple ? "Retake with guide" : "Live camera"}</button>}
+        <button className="btn" onClick={() => ref.current?.click()} disabled={busy || (role.startsWith("reference") && !attestation)}>
+          {busy ? (isVideo ? "Extracting frames…" : "Checking photo…") : mine.length ? (multiple ? `Add more (${mine.length})` : isVideo ? "Replace video" : "Retake") : isVideo ? "Upload video" : inHand && !role.startsWith("reference") ? "Take photo" : "Upload photo"}
+        </button>
+      </div>
+      {isVideo && last?.quality?.ok && <p className="small" style={{ color: "var(--ok)", marginTop: 8 }}>✓ {(last.quality as any).metrics?.distinctFrames} distinct frames extracted</p>}
+      {!isVideo && last?.quality && (last.quality.ok && !last.quality.issues.length ? <p className="small" style={{ color: "var(--ok)", marginTop: 8 }}>✓ Photo looks good</p> :
         last.quality.issues.map((i) => <div key={i.issue} className={`issue ${i.severity}`} role="alert"><strong>{i.severity === "major" ? "Retake needed: " : "Tip: "}</strong>{i.guidance}</div>))}
+      {isVideo && last?.quality && !last.quality.ok && last.quality.issues.map((i) => <div key={i.issue} className="issue major" role="alert">{i.guidance}</div>)}
       {last && !last.quality && <p className="small muted">Uploaded — quality will be checked before analysis.</p>}
     </div>
   );
@@ -63,10 +74,14 @@ export function ScanWizard() {
   const [grader, setGrader] = useState("");
   const [att, setAtt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [focusRole, setFocusRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = new URLSearchParams(location.search).get("session");
-    if (id) api<Session>(`/api/sessions/${id}`).then((s) => { setSession(s); setCert(s.certNumber ?? ""); setGrader(s.grader ?? ""); setStep(1); });
+    const p = new URLSearchParams(location.search);
+    const id = p.get("session");
+    const role = p.get("role");
+    const stepFor: Record<string, number> = { front: 1, back: 1, label_closeup: 2, tilt_frame: 4, tilt_video: 4, backlit: 4, edge: 4, security_closeup: 4, reference_front: 5, reference_back: 5 };
+    if (id) api<Session>(`/api/sessions/${id}`).then((s) => { setSession(s); setCert(s.certNumber ?? ""); setGrader(s.grader ?? ""); setStep(role ? stepFor[role] ?? 1 : 1); setFocusRole(role); });
   }, []);
 
   const inHand = session?.mode !== "online_listing";
@@ -79,10 +94,10 @@ export function ScanWizard() {
     setSession(await api<Session>(`/api/sessions/${id}`));
     setStep(1);
   }
-  async function upload(role: string, f: File, attestation?: string) {
+  async function upload(role: string, f: Blob, attestation?: string, name?: string) {
     setErr(null);
     const fd = new FormData();
-    fd.append("file", await prepare(f), f.name);
+    fd.append("file", await prepare(f), name ?? (f as File).name ?? "upload");
     fd.append("role", role);
     if (attestation) fd.append("attestation", attestation);
     try { await api(`/api/sessions/${session!.id}/images`, { method: "POST", body: fd }); } catch (e) { setErr(e); }
@@ -140,8 +155,8 @@ export function ScanWizard() {
         <div className="stack">
           {!inHand && <div className="banner">Online listing mode: upload the seller's photos. Results describe the photos only.</div>}
           <div className="grid grid-2">
-            <Capture label="Front of slab" hint="Whole slab, all four edges visible, straight on, no glare." role="front" onUpload={upload} images={images} inHand={inHand} />
-            <Capture label="Back of slab" hint="Flip the slab over. Same framing as the front." role="back" onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Front of slab" hint="Whole slab, all four edges visible, straight on, no glare." role="front" highlight={focusRole === "front"} onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Back of slab" hint="Flip the slab over. Same framing as the front." role="back" highlight={focusRole === "back"} onUpload={upload} images={images} inHand={inHand} />
           </div>
           <div className="row spread"><span className="small muted">Photos and retakes never use a credit.</span><button className="btn primary" disabled={!images.some((i) => i.role === "front")} onClick={() => setStep(2)}>Continue</button></div>
         </div>
@@ -149,7 +164,7 @@ export function ScanWizard() {
 
       {step === 2 && session && (
         <div className="stack">
-          <Capture label="Certification label close-up" hint="Fill the frame with the label. Make sure the number and QR/barcode are sharp." role="label_closeup" onUpload={upload} images={images} inHand={inHand} />
+          <Capture label="Certification label close-up" hint="Fill the frame with the label. Make sure the number and QR/barcode are sharp." role="label_closeup" highlight={focusRole === "label_closeup"} onUpload={upload} images={images} inHand={inHand} />
           <div className="row spread"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={busy} onClick={async () => { await readLabel(); setStep(3); }}>{busy ? "Reading label…" : "Read label"}</button></div>
         </div>
       )}
@@ -173,10 +188,11 @@ export function ScanWizard() {
         <div className="stack">
           <div className="banner"><strong>Optional security captures.</strong> They let us check visible holder features. Never bend, open, heat or scrape a slab.{(SECURITY_TIPS[grader] ?? []).map((t) => <div key={t} className="small" style={{ marginTop: 6 }}>• {t}</div>)}</div>
           <div className="grid grid-2">
-            <Capture label="Tilt sequence" hint="3–5 photos of the label while tilting the slab gently under one light." role="tilt_frame" multiple onUpload={upload} images={images} inHand={inHand} />
-            {grader === "PSA" && <Capture label="Backlit label" hint="Same framing as your label close-up, with a light behind the label." role="backlit" onUpload={upload} images={images} inHand={inHand} />}
-            <Capture label="Holder edges & seams" hint="Close-ups of each side of the holder." role="edge" multiple onUpload={upload} images={images} inHand={inHand} />
-            <Capture label="Security close-up" hint="Hologram or fine print, as close as your camera can focus." role="security_closeup" multiple onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Tilt video" hint="A 3–5 second clip slowly tilting the label under one light. We pick distinct, sharp frames." role="tilt_video" onUpload={upload} images={images} inHand={inHand} highlight={focusRole === "tilt_video"} />
+            <Capture label="Tilt photos (alternative)" hint="Or 3–5 photos of the label at different angles." role="tilt_frame" multiple onUpload={upload} images={images} inHand={inHand} highlight={focusRole === "tilt_frame"} />
+            {grader === "PSA" && <Capture label="Backlit label" hint="Same framing as your label close-up, with a light behind the label." role="backlit" highlight={focusRole === "backlit"} onUpload={upload} images={images} inHand={inHand} />}
+            <Capture label="Holder edges & seams" hint="Close-ups of each side of the holder." role="edge" highlight={focusRole === "edge"} multiple onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Security close-up" hint="Hologram or fine print, as close as your camera can focus." role="security_closeup" highlight={focusRole === "security_closeup"} multiple onUpload={upload} images={images} inHand={inHand} />
           </div>
           <div className="row spread"><button className="btn" onClick={() => setStep(3)}>Back</button><button className="btn primary" onClick={() => setStep(5)}>Continue</button></div>
         </div>
@@ -196,8 +212,8 @@ export function ScanWizard() {
             </div>
           </div>
           <div className="grid grid-2">
-            <Capture label="Reference — front" hint="Front image from the grader's record." role="reference_front" onUpload={upload} images={images} attestation={att} inHand={false} />
-            <Capture label="Reference — back" hint="Back image, if available." role="reference_back" onUpload={upload} images={images} attestation={att} inHand={false} />
+            <Capture label="Reference — front" hint="Front image from the grader's record." role="reference_front" highlight={focusRole === "reference_front"} onUpload={upload} images={images} attestation={att} inHand={false} />
+            <Capture label="Reference — back" hint="Back image, if available." role="reference_back" highlight={focusRole === "reference_back"} onUpload={upload} images={images} attestation={att} inHand={false} />
           </div>
           <div className="row spread"><button className="btn" onClick={() => setStep(4)}>Back</button><button className="btn primary" onClick={() => setStep(6)}>Continue</button></div>
         </div>
@@ -206,7 +222,7 @@ export function ScanWizard() {
       {step === 6 && session && (
         <div className="card stack">
           <h2>Ready to analyze</h2>
-          <ul className="small">{["front", "back", "label_closeup", "tilt_frame", "backlit", "reference_front"].map((r) => <li key={r}>{images.some((i) => i.role === r) ? "✓" : "–"} {r.replace("_", " ")}</li>)}</ul>
+          <ul className="small">{["front", "back", "label_closeup", "tilt_video", "tilt_frame", "backlit", "edge", "reference_front"].map((r) => <li key={r}>{images.some((i) => i.role === r) ? "✓" : "–"} {r.replace("_", " ")}</li>)}</ul>
           <p className="muted small">{willCharge ? "This uses 1 verification credit, charged only when your report is delivered. Failed analyses are not charged." : "Re-analysis of this slab is included — no extra credit."}</p>
           {outOfCredits ? <UpgradePrompt reason="You're out of verifications." /> : <button className="btn primary block" disabled={busy} onClick={analyze}>{busy ? "Starting…" : "Analyze slab"}</button>}
           <Link className="small" href="/dashboard">Save and finish later</Link>

@@ -34,7 +34,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       {err && <div className="banner bad">{err}</div>}
       {(s.status === "queued" || s.status === "processing") && <div className="banner" role="status" aria-live="polite">Analyzing your slab… this usually takes under a minute.</div>}
       {s.status === "failed" && <div className="banner bad" role="alert">{s.error}</div>}
-      {s.report ? <ReportView report={s.report} history={s.assessmentHistory} /> : s.status === "draft" && <p>Not analyzed yet. <Link href={`/scan?session=${id}`}>Continue scan</Link></p>}
+      {s.report ? <ReportView report={s.report} history={s.assessmentHistory} sessionId={id} canNarrate={me.data?.usage.features.includes("detailed_report")} /> : s.status === "draft" && <p>Not analyzed yet. <Link href={`/scan?session=${id}`}>Continue scan</Link></p>}
     </div>
   );
 }

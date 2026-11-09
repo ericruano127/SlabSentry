@@ -62,7 +62,7 @@ export async function adminMetrics(days = 30) {
     costs: {
       avgPerVerification: costPerVerification,
       avgCompute: per("vision_cpu_second"), avgOcr: per("google_vision_text_detection") + per("ocr_call_local"), avgStorage: per("storage_gb_month"),
-      avgImageSearch: per("google_vision_web_detection"), avgAi: per("multimodal_ai_call"), lines: costs,
+      avgImageSearch: per("google_vision_web_detection"), avgAi: per("multimodal_ai_call") + per("ai_narrative"), lines: costs,
       note: "Estimated from config/costs.json rates; reconcile against provider invoices before changing allowances.",
     },
     margin: { avgRevenuePerVerification: revenuePerVerification, avgContributionPerVerification: revenuePerVerification - costPerVerification },

@@ -1,7 +1,12 @@
 import { GRADERS } from "../graders/registry";
 import { generationsFor, SECURITY_FEATURES, type HolderGeneration } from "../holders/library";
+import { distinctImages, edgeReviewRules, labelRules, physicalMatchRules, retakeRequests, tiltVideoRules } from "./phase2";
 import type {
   ComparisonResult,
+  EdgeReviewResult,
+  PhysicalMatch,
+  RetakeRequest,
+  TiltVideoResult,
   EvidenceQuality,
   GraderId,
   HolderInspectionResult,
@@ -19,7 +24,7 @@ import type {
  * produced: we emit observations, findings and an overall category. A
  * statistical score should only be added after labeled calibration.
  */
-export const RULES_VERSION = "rules-0.1.0";
+export const RULES_VERSION = "rules-0.2.0";
 
 export interface EngineInput {
   mode: VerificationMode;
@@ -34,6 +39,8 @@ export interface EngineInput {
   comparisons: { side: "front" | "back"; referenceSource: Provenance["source"]; result: ComparisonResult }[];
   holder: HolderInspectionResult | null;
   reverseImage?: { status: "not_configured" | "not_entitled" | "done"; samePhotoUrls: string[]; similarUrls: string[] };
+  edgeReviews?: EdgeReviewResult[];
+  tiltVideo?: TiltVideoResult;
   now?: string;
 }
 
@@ -44,6 +51,9 @@ export interface EngineOutput {
   assessment: OverallAssessment;
   nextActions: string[];
   holderGeneration: { candidates: HolderGeneration[]; note: string } | null;
+  physicalMatch: PhysicalMatch[];
+  retakeRequests: RetakeRequest[];
+  duplicates: { id: string; role: string; duplicateOf: string }[];
   rulesVersion: string;
 }
 
@@ -60,6 +70,10 @@ export function runEngine(input: EngineInput): EngineOutput {
   const obs: Observation[] = [];
   const findings: RiskFinding[] = [];
   const add = (o: Observation) => (obs.push(o), o.id);
+  const physical: PhysicalMatch[] = [];
+  // Near-identical photos never add evidence (e.g. the same shot uploaded as front and back).
+  const { kept: distinct, duplicates } = distinctImages(input.images);
+  input = { ...input, images: distinct };
 
   // ---------- 1. Certification ----------
   if (!input.grader || !input.certNumber) {
@@ -142,12 +156,9 @@ export function runEngine(input: EngineInput): EngineOutput {
 
     if (r.designMatch.status === "potential_discrepancy") {
       findings.push({ id: `f.${c.side}.design`, severity: c.referenceSource === "official_api" ? "high" : "medium", pattern: c.side === "back" ? "front_back_inconsistent" : "cert_cloning_suspected", summary: `${cap(c.side)} does not appear to be the card shown in the reference`, explanation: "A valid certification number paired with a different card is the signature of certificate cloning.", observationIds: [dId], legitimateExplanations: ["Reference image belongs to another cert (check source)", "Severe glare or partial capture"] });
-    } else if (r.designMatch.status === "consistent" && r.centering.status === "potential_discrepancy") {
-      findings.push({ id: `f.${c.side}.copy`, severity: c.referenceSource === "official_api" ? "high" : "medium", pattern: "different_physical_card", summary: "Same card design, but possibly a different physical copy", explanation: "Artwork matches, but the card's cut/centering differs from the reference. A genuine slab should contain the exact copy that was imaged at grading.", observationIds: [dId, cId], legitimateExplanations: ["Perspective distortion in the photo", "Reference image cropped or of the card outside the holder"] });
     }
-    if (r.designMatch.status === "consistent" && r.localDifferences.status === "potential_discrepancy" && r.centering.status !== "potential_discrepancy") {
-      findings.push({ id: `f.${c.side}.local`, severity: "low", pattern: "different_physical_card", summary: "Localized differences from the reference", explanation: "Some regions differ structurally. This can be a different copy, but reflections, holder scratches and image processing are common causes.", observationIds: [lId], legitimateExplanations: ["Holder scratches or reflections", "Reholder since imaging", "Compression artifacts"] });
-    }
+    physical.push(physicalMatchRules(c, { design: dId, centering: cId, local: lId }, add, findings, prov));
+    labelRules(c, add, findings, prov);
     if (r.photoReuse.nearIdentical && input.mode === "in_hand") {
       const id = add({ id: `reuse.${c.side}.screenshot`, category: "image_reuse", title: `${cap(c.side)}: capture nearly identical to reference`, status: "potential_discrepancy", basis: "inference", detail: "Your capture is pixel-similar to the reference image itself, which usually means a screenshot was photographed rather than the slab.", metrics: { hamming: r.photoReuse.hammingFull }, provenance: prov("computed", r.toolVersion) });
       findings.push({ id: `f.${c.side}.screenshot`, severity: "medium", pattern: "screenshot_of_reference", summary: "Capture appears to be the reference photo", explanation: "In-hand mode expects a fresh photo of the physical slab.", observationIds: [id], legitimateExplanations: ["Wrong file selected"] });
@@ -205,13 +216,18 @@ export function runEngine(input: EngineInput): EngineOutput {
       findings.push({ id: "f.listing_reuse", severity: "low", pattern: "listing_photo_reuse", summary: "Listing photo appears elsewhere online", explanation: "The seller's photo appears on other pages. Ask the seller for a new photo with a handwritten note or specific angle.", observationIds: [id], legitimateExplanations: ["Seller cross-listed on multiple marketplaces", "Previous sale of the same slab"] });
   }
 
+  edgeReviewRules(input.edgeReviews, add, prov);
+  tiltVideoRules(input.tiltVideo, add, prov);
+
   // ---------- 9. Evidence quality ----------
   const evidenceQuality = assessEvidence(input, hasReference);
   if (evidenceQuality.level === "insufficient")
     findings.push({ id: "f.insufficient", severity: "info", pattern: "insufficient_evidence", summary: "Evidence is insufficient for a reliable assessment", explanation: evidenceQuality.reasons.join(" "), observationIds: [], legitimateExplanations: [] });
 
   const assessment = overall(findings, evidenceQuality);
-  return { observations: obs, findings, evidenceQuality, assessment, nextActions: nextActions(input, findings, evidenceQuality, hasReference), holderGeneration, rulesVersion: RULES_VERSION };
+  if (duplicates.length) evidenceQuality.reasons.push(`${duplicates.length} photo(s) were near-duplicates of another photo and were not counted.`);
+  const retakes = retakeRequests({ grader: input.grader, obs, findings, roles: new Set(input.images.map((i) => i.role)), hasReference, comparisons: input.comparisons, mode: input.mode, duplicates });
+  return { observations: obs, findings, evidenceQuality, assessment, nextActions: nextActions(input, findings, evidenceQuality, hasReference), holderGeneration, physicalMatch: physical, retakeRequests: retakes, duplicates, rulesVersion: RULES_VERSION };
 }
 
 function assessEvidence(input: EngineInput, hasReference: boolean): EvidenceQuality {

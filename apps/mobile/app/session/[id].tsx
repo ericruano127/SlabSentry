@@ -1,6 +1,6 @@
 import { useLocalSearchParams, router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, ScrollView, Share } from "react-native";
+import { Alert, Linking, ScrollView, Share, View } from "react-native";
 import { api } from "../../lib/api";
 import { ASSESS, Button, Card, STATUS, T, useTheme } from "../../lib/ui";
 
@@ -8,7 +8,12 @@ export default function SessionReport() {
   const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [s, setS] = useState<any>(null);
-  const load = useCallback(async () => setS(await api(`/api/sessions/${id}`)), [id]);
+  const [narrative, setNarrative] = useState<any>(null);
+  const load = useCallback(async () => {
+    const x = await api(`/api/sessions/${id}`);
+    setS(x);
+    if (x.report?.narrative) setNarrative(x.report.narrative);
+  }, [id]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (s && (s.status === "queued" || s.status === "processing")) {
@@ -31,6 +36,29 @@ export default function SessionReport() {
             <T size={19} bold color={tone(ASSESS[r.engine.assessment].tone)}>{ASSESS[r.engine.assessment].label}</T>
             <T muted size={13}>Evidence quality: {r.engine.evidenceQuality.level}</T>
             {r.engine.evidenceQuality.reasons.map((x: string) => <T key={x} muted size={13}>• {x}</T>)}
+          </Card>
+          {r.engine.retakeRequests?.length > 0 && (
+            <Card>
+              <T bold>Improve this report</T>
+              <T muted size={13}>Adding these and re-analyzing uses no extra credit.</T>
+              {r.engine.retakeRequests.map((q: any) => (
+                <View key={q.role + q.reason} style={{ gap: 4, marginTop: 8 }}>
+                  <T size={14}>{q.reason} {q.guidance}</T>
+                  <Button title="Add this capture" onPress={() => router.push({ pathname: "/scan", params: { session: id, role: q.role } })} />
+                </View>
+              ))}
+            </Card>
+          )}
+          {r.engine.physicalMatch?.map((pm: any) => (
+            <Card key={pm.side}>
+              <T bold>Same physical card? ({pm.side})</T>
+              <T color={pm.verdict === "supported" ? t.ok : pm.verdict === "conflicting" ? t.bad : t.warn}>{pm.summary}</T>
+            </Card>
+          ))}
+          <Card>
+            <T bold>Plain-language explanation</T>
+            {narrative ? <T size={14}>{narrative.text}</T> : <Button title="Explain this report (Pro)" onPress={async () => { try { setNarrative((await api(`/api/sessions/${id}/narrative`, { method: "POST" })).narrative); } catch (e: any) { Alert.alert("Explanation", e.message); } }} />}
+            {narrative?.source === "ai" && <T muted size={12}>AI-assisted from the findings; it cannot change them.</T>}
           </Card>
           <Card><T bold>Recommended next action</T>{r.engine.nextActions.map((a: string, n: number) => <T key={a}>{n + 1}. {a}</T>)}</Card>
           <Card>

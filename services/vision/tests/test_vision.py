@@ -94,3 +94,107 @@ def test_ocr_reads_label():
     if not ocr.available():
         return  # OCR optional; pipeline degrades to QR + user entry
     assert any("12345678" in t.replace(" ", "") for t in r["ocrText"]), r["ocrText"]
+
+
+# ---------------- Phase 2 ----------------
+from app import fingerprint, seam, video  # noqa: E402
+
+
+def _fp(up, ref):
+    r = compare.compare(up, ref)
+    assert r["designMatch"]["status"] == "consistent"
+    return r, r["fingerprint"]
+
+
+def test_fingerprint_same_copy_all_signals_agree():
+    _, f = _fp(synth.photo(synth.slab(GENUINE), angle=2, scale=0.85, light=0.9, seed=5), REF)
+    assert f["marks"]["status"] == "consistent" and f["registration"]["status"] == "consistent"
+
+
+def test_fingerprint_unique_marks_flagged_with_regions():
+    marked = synth.card(ART, marks_seed=3)
+    r, f = _fp(synth.photo(synth.slab(marked), angle=-1, seed=6), REF)
+    assert f["marks"]["status"] == "potential_discrepancy"
+    assert f["marks"]["onlyInUpload"], "marks must be localized for the report"
+    assert r["centering"]["status"] == "consistent"  # same cut: only the marks differ
+
+
+def test_fingerprint_registration_shift():
+    shifted = GENUINE.copy()
+    shifted[..., 2] = np.roll(shifted[..., 2], 4, axis=1)
+    _, f = _fp(synth.photo(synth.slab(shifted), seed=8), REF)
+    assert f["registration"]["status"] == "potential_discrepancy"
+
+
+def test_edge_profile_matches_same_wear_and_rejects_different_wear():
+    worn = synth.card(ART, chip_seed=11)
+    ref = synth.photo(synth.slab(worn), seed=1)
+    _, same = _fp(synth.photo(synth.slab(worn), angle=2, scale=0.9, seed=4), ref)
+    _, other = _fp(synth.photo(synth.slab(synth.card(ART, chip_seed=12)), angle=-2, seed=5), ref)
+    assert same["edgeProfile"]["status"] == "consistent", same["edgeProfile"]
+    assert other["edgeProfile"]["status"] == "potential_discrepancy", other["edgeProfile"]
+
+
+def test_low_resolution_makes_fine_signals_inconclusive():
+    small = synth.photo(synth.slab(GENUINE), scale=0.4, seed=3)
+    _, f = _fp(small, REF)
+    assert f["lowResolution"] and f["marks"]["status"] == "inconclusive"
+
+
+def test_label_swap_detected():
+    from app import ocr
+    if not ocr.available():
+        return
+    ref = synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 12345678"), seed=1)
+    up = synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 87654321"), seed=2)
+    r = compare.compare(up, ref)
+    assert r["labelComparison"]["status"] == "potential_discrepancy", r["labelComparison"]
+    same = compare.compare(synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 12345678"), seed=3), ref)
+    assert same["labelComparison"]["status"] == "consistent"
+
+
+def _write_video(frames, path):
+    h, w = frames[0].shape[:2]
+    vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 10, (w, h))
+    for f in frames:
+        vw.write(f)
+    vw.release()
+    return open(path, "rb").read()
+
+
+def test_video_frames_are_distinct(tmp_path):
+    base = cv2.resize(synth.slab(GENUINE), (480, 640))
+    frames = []
+    for k in range(40):
+        f = base.copy()
+        hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
+        hsv[20:110, 40:200, 0] = (k * 4) % 180
+        hsv[20:110, 40:200, 1:] = 200
+        frames.append(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR))
+    r = video.extract_frames(_write_video(frames, str(tmp_path / "t.mp4")), 6)
+    assert r["status"] == "ok" and 3 <= r["distinctFrames"] <= 6
+    static = video.extract_frames(_write_video([base] * 30, str(tmp_path / "s.mp4")), 6)
+    assert static["distinctFrames"] == 1 and static["status"] == "too_few_distinct_frames"
+
+
+def test_seam_review():
+    img = np.full((600, 900, 3), 200, np.uint8)
+    img[300:, :] = 120
+    clean = seam.review_edge(img)
+    assert clean["status"] == "consistent", clean
+    cracked = img.copy()
+    cv2.rectangle(cracked, (430, 285), (470, 315), (255, 255, 255), -1)
+    r = seam.review_edge(cracked)
+    assert r["status"] == "inconclusive" and r["anomalies"] >= 1, r
+
+
+def test_label_comparison_tolerates_ocr_segmentation():
+    from app import ocr
+    if not ocr.available():
+        return
+    ref = synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 12345678"), seed=1)
+    up = synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 12345678"), seed=9)
+    from app.label import compare_labels
+    # upload text as a label close-up would give it: separate words
+    r = compare_labels(up, ref, ["PSA", "10", "GEM MT", "12345678"])
+    assert r["status"] == "consistent" and not r["certConflict"], r

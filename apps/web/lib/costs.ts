@@ -11,3 +11,8 @@ export async function recordCost(sessionId: string, userId: string, item: string
   const rate = Number(process.env[`COST_RATE_${item.toUpperCase()}`] ?? costRates()[item] ?? 0);
   await q(`insert into processing_costs (session_id,user_id,item,units,cost_usd) values ($1,$2,$3,$4,$5)`, [sessionId, userId, item, units, units * rate]);
 }
+
+/** Record a cost line whose USD amount is already known (e.g. from token usage). */
+export async function recordCostUsd(sessionId: string, userId: string, item: string, costUsd: number, units = 1) {
+  await q(`insert into processing_costs (session_id,user_id,item,units,cost_usd) values ($1,$2,$3,$4,$5)`, [sessionId, userId, item, units, costUsd]);
+}
