@@ -105,7 +105,9 @@ export type QualityIssue =
   | "steep_angle"
   | "occlusion"
   | "text_unreadable"
-  | "subject_too_small";
+  | "subject_too_small"
+  | "motion_blur"
+  | "label_blur";
 
 export interface QualityReport {
   ok: boolean;

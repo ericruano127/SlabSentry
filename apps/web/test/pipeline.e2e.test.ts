@@ -25,6 +25,7 @@ describe.skipIf(!run)("analysis pipeline (live vision service)", () => {
     const s = await newSession(u);
     await q(`update verification_sessions set grader='PSA', cert_number='12345678', cert_source='user', cert_confirmed=true where id=$1`, [s]);
     await addImage(u, s, "front", img(front));
+    await addImage(u, s, "back", img("front_different_card.jpg")); // front + back are both required
     await addImage(u, s, "reference_front", img("reference.jpg"), { attestation: "Saved from PSA cert page" });
     expect(preflight(await activeImages(s))).toEqual([]);
     await reserveCredit(u, s);

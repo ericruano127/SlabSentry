@@ -102,14 +102,17 @@ export async function activeImages(sessionId: string) {
   return q(`select * from submitted_images where session_id=$1 and is_original and not superseded and purged_at is null order by created_at`, [sessionId]);
 }
 
-/** Free pre-analysis gate: blocks only clearly unusable sets so users aren't charged for them. */
+/** Free pre-analysis gate: front AND back are required, and clearly unusable photos must be retaken
+ * before any credit is reserved. */
 export function preflight(images: any[]) {
-  const front = images.find((i) => i.role === "front");
   const problems: { role: string; issues: any[] }[] = [];
   const video = images.find((i) => i.role === "tilt_video");
   if (video?.quality && !video.quality.ok) problems.push({ role: "tilt_video", issues: video.quality.issues });
-  if (!front) problems.push({ role: "front", issues: [{ issue: "missing", severity: "major", guidance: "Add a full front photo of the slab." }] });
-  else if (front.quality && !front.quality.ok) problems.push({ role: "front", issues: front.quality.issues.filter((i: any) => i.severity === "major") });
+  for (const role of ["front", "back"] as const) {
+    const img = images.find((i) => i.role === role);
+    if (!img) problems.push({ role, issues: [{ issue: "missing", severity: "major", guidance: role === "front" ? "Add a full front photo of the slab." : "Add a full back photo of the slab (flip it over, same framing)." }] });
+    else if (img.quality && !img.quality.ok) problems.push({ role, issues: img.quality.issues.filter((i: any) => i.severity === "major") });
+  }
   return problems;
 }
 

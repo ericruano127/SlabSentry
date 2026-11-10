@@ -1,5 +1,6 @@
 import { officialLookupUrl } from "../graders/registry";
 import { defaultLibrary } from "../library/runtime";
+import { imageQualityTable, quickSummary, type ImageQualityRow, type QuickSummary } from "./summary";
 import type { EngineInput, EngineOutput } from "../risk/engine";
 import type { GraderId, OfficialCertRecord, OverallAssessment, VerificationMode } from "../types";
 
@@ -33,6 +34,10 @@ export interface VerificationReport {
   };
   engine: EngineOutput;
   assessmentLabel: string;
+  /** One-screen summary: verified / looks inconsistent / can't see / ask or photograph next. */
+  quickSummary: QuickSummary;
+  /** Per-photo quality and which checks it limited. */
+  imageQuality: ImageQualityRow[];
   /** Deterministic plain-language interpretation of the evidence layers. */
   interpretation: string[];
   holderLibraryVersion: string;
@@ -82,6 +87,8 @@ export function buildReport(sessionId: string, input: EngineInput, out: EngineOu
     engine: out,
     assessmentLabel: ASSESSMENT_LABELS[out.assessment].title,
     interpretation: interpret(input, out),
+    quickSummary: quickSummary(input, out),
+    imageQuality: imageQualityTable(input, out),
     holderLibraryVersion: out.library.version,
     library: out.library,
     category: out.category,

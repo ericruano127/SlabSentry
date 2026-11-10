@@ -33,9 +33,10 @@ async function analyze(u: string, s: string) {
 }
 const obs = (rep: any, id: string) => rep.engine.observations.find((o: any) => o.id === id);
 
+beforeAll(async () => { if (run) await resetDb(); });
+afterAll(() => pool.end());
+
 describe.skipIf(!run)("phase C pipeline (live vision service)", () => {
-  beforeAll(resetDb);
-  afterAll(() => pool.end());
 
   it("live in-app capture is attested by a single-use code", async () => {
     const u = await newUser();
@@ -122,5 +123,20 @@ describe.skipIf(!run)("phase C pipeline (live vision service)", () => {
     const rep = await analyze(u, s);
     expect(rep.market.estimateCents).toBe(100500);
     expect(rep.engine.findings.find((f: any) => f.pattern === "price_anomaly")?.severity).toBe("low");
+  });
+});
+
+describe.skipIf(!run)("phase D gate", () => {
+  it("front and back are both required before any credit is reserved", async () => {
+    const { preflight, activeImages } = await import("../lib/sessions");
+    const u = await newUser();
+    const s = await session(u);
+    await addImage(u, s, "front", file("front_genuine.jpg"));
+    expect(preflight(await activeImages(s)).map((p) => p.role)).toEqual(["back"]);
+    await addImage(u, s, "back", file("front_different_card.jpg"));
+    expect(preflight(await activeImages(s))).toEqual([]);
+    const rep = await analyze(u, s);
+    expect(rep.quickSummary.headline).toBeTruthy();
+    expect(rep.imageQuality.map((r: any) => r.role).sort()).toEqual(["back", "front"]);
   });
 });

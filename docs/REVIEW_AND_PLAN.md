@@ -142,7 +142,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 6. Image manipulation: metadata signals read before stripping (editing software, missing camera data, thumbnail mismatch), double-JPEG / recompression heuristics. These produce "inconclusive" signals, never verdicts. In-app live-capture attestation (server nonce) raises evidence quality.
 7. Cloned-cert detector: keyed hash of (grader, cert) plus a perceptual item fingerprint across all uploads. Flags the same cert on visually different items without exposing other users' data.
 
-**Phase D — Capture gate and tiered flow**
+**Phase D — Capture gate and tiered flow** ✅ done (2026-11-10) — see `docs/PHASE_D.md`
 1. Quick scan by default (front + back required, label, cert lookup), ending in a one-screen summary: *Verified · Looks inconsistent · Can't see from these photos · Ask the seller / photograph next*.
 2. Deep check triggered automatically by findings or opt-in, requesting only the needed media.
 3. Real-time edge/framing, skew and motion-blur detection, plus region (label) sharpness and auto-capture: web in JS; mobile via a camera frame processor (feasibility check first).

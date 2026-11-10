@@ -33,6 +33,18 @@ export default function SessionReport() {
       {s.status === "failed" && <Card><T color={t.bad}>{s.error}</T></Card>}
       {r && (
         <>
+          {r.quickSummary && (
+            <Card>
+              <T bold size={16}>{r.quickSummary.headline}</T>
+              {[["Verified", r.quickSummary.verified, t.ok], ["Looks inconsistent", r.quickSummary.inconsistent.map((x: any) => `${x.severity.toUpperCase()}: ${x.text}`), t.bad], ["Can't see from these photos", r.quickSummary.cantSee, t.muted], ["Ask / photograph next", r.quickSummary.askNext, t.accent]].map(([title, items, color]: any) => (
+                <View key={title} style={{ marginTop: 6 }}>
+                  <T bold size={13} color={color}>{title}</T>
+                  {items.length ? items.map((x: string) => <T key={x} size={14}>• {x}</T>) : <T muted size={13}>—</T>}
+                </View>
+              ))}
+              {r.quickSummary.deepCheckRecommended && <Button primary title="Start deep check (free re-analysis)" onPress={() => router.push({ pathname: "/scan", params: { session: id, deep: "1" } })} />}
+            </Card>
+          )}
           <Card>
             <T muted size={13}>Overall assessment</T>
             <T size={19} bold color={tone(ASSESS[r.engine.assessment].tone)}>{ASSESS[r.engine.assessment].label}</T>

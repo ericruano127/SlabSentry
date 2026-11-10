@@ -22,7 +22,9 @@ const askAttestation = () => new Promise<string | null>((resolve) =>
 
 export default function Scan() {
   const t = useTheme();
-  const params = useLocalSearchParams<{ session?: string; role?: string }>();
+  const params = useLocalSearchParams<{ session?: string; role?: string; deep?: string }>();
+  // Quick scan by default (front, back, label); deep check adds the optional security/reference captures.
+  const [deep, setDeep] = useState(params.deep === "1");
   const [mode, setMode] = useState<"in_hand" | "online_listing" | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(params.session ?? null);
   const [i, setI] = useState(0);
@@ -35,7 +37,8 @@ export default function Scan() {
   useEffect(() => { api("/api/library").then(setLibrary).catch(() => {}); }, []);
   const cat = library?.categories.find((c) => c.id === categoryId);
   const graderOptions = (library?.graders ?? []).filter((g) => g.categories.includes(categoryId));
-  const steps: Step[] = STEPS.map((st) =>
+  const QUICK = ["front", "back", "label_closeup"];
+  const steps: Step[] = STEPS.filter((st) => deep || QUICK.includes(st.role)).map((st) =>
     st.role === "front" && cat ? { ...st, title: "Front", hint: cat.captureGuidance.front }
       : st.role === "back" && cat ? { ...st, title: "Back", hint: cat.captureGuidance.back }
       : st.role === "label_closeup" && cat ? { ...st, hint: cat.captureGuidance.label } : st);
@@ -44,9 +47,11 @@ export default function Scan() {
 
   useEffect(() => {
     if (params.session) setMode("in_hand");
-    const i = STEPS.findIndex((st) => st.role === params.role);
+    if (params.role && !QUICK.includes(params.role)) setDeep(true);
+    const list = STEPS.filter((st) => params.deep === "1" || (params.role && !QUICK.includes(params.role)) || QUICK.includes(st.role));
+    const i = list.findIndex((st) => st.role === params.role);
     if (i >= 0) setI(i);
-  }, [params.session, params.role]);
+  }, [params.session, params.role, params.deep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function start(m: "in_hand" | "online_listing") {
     const r = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode: m, category: categoryId } });
@@ -156,7 +161,7 @@ export default function Scan() {
   const last = mine[mine.length - 1];
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <T muted size={13}>Step {i + 1} of {STEPS.length}</T>
+      <T muted size={13}>{deep ? "Deep check" : "Quick scan"} · step {i + 1} of {steps.length}</T>
       <Card style={{ gap: 10 }}>
         <T size={18} bold>{step.title}</T>
         <T muted>{step.hint}</T>
@@ -171,8 +176,8 @@ export default function Scan() {
       <View style={{ flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1 }}><Button title="Back" onPress={() => setI(Math.max(0, i - 1))} disabled={i === 0} /></View>
         <View style={{ flex: 1 }}>
-          {i < STEPS.length - 1
-            ? <Button primary title={step.optional && !last ? "Skip" : "Next"} onPress={() => (step.role === "label_closeup" ? readLabel().then(() => { setPhase("capture"); setI(i + 1); }) : setI(i + 1))} disabled={!step.optional && !last && step.role !== "back"} />
+          {i < steps.length - 1
+            ? <Button primary title={step.optional && !last ? "Skip" : "Next"} onPress={() => (step.role === "label_closeup" ? readLabel().then(() => { setPhase("capture"); setI(i + 1); }) : setI(i + 1))} disabled={!step.optional && !last} />
             : <Button primary title="Review" onPress={() => (cert ? setPhase("confirm") : readLabel())} />}
         </View>
       </View>

@@ -113,13 +113,14 @@ im=cv2.resize(cv2.imread("${FIX}/front_genuine.jpg"),(480,640));vw=cv2.VideoWrit
     const req = (ids: string[]) => new Request("http://x/api/sessions/bulk-analyze", { method: "POST", headers: { "x-dev-user": u, "content-type": "application/json" }, body: JSON.stringify({ ids }) });
     const s1 = await newSession(u);
     await addImage(u, s1, "front", file("front_genuine.jpg"));
+    await addImage(u, s1, "back", file("front_different_card.jpg"));
     expect((await bulkAnalyze(req([s1]))).status).toBe(403); // free plan
     const start = new Date();
     await applyStripeEvent(stripeEvent("customer.subscription.created", stripeSub({ userId: u, price: "price_power_month", start, periodEnd: new Date(start.getTime() + 30 * 864e5) }), start));
     await q(`update verification_allowances set used = granted - 1 where user_id=$1 and kind='subscription_period'`, [u]); // 1 period credit left
     await q(`update verification_allowances set used = granted where user_id=$1 and kind='lifetime_free'`, [u]);
     const ids = [s1];
-    for (let i = 0; i < 2; i++) { const s = await newSession(u); await addImage(u, s, "front", file("front_genuine.jpg")); ids.push(s); }
+    for (let i = 0; i < 2; i++) { const s = await newSession(u); await addImage(u, s, "front", file("front_genuine.jpg")); await addImage(u, s, "back", file("front_different_card.jpg")); ids.push(s); }
     const blurry = await newSession(u);
     await addImage(u, blurry, "front", file("front_blurry.jpg"));
     ids.push(blurry);

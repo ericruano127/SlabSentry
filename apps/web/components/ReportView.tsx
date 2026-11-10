@@ -41,7 +41,7 @@ const ERA_BASIS: Record<string, string> = {
   only_known_generation: "Only documented generation",
   unknown: "Unknown",
 };
-const ROLE_LABEL: Record<string, string> = { uv: "Blacklight (UV) photo", security_closeup: "Microprint close-up", front: "Front photo", back: "Back photo", label_closeup: "Label close-up", backlit: "Backlit label", tilt_video: "Tilt video", edge: "Edge close-ups", reference_front: "Reference image" };
+const ROLE_LABEL: Record<string, string> = { front: "Front photo", back: "Back photo", label_closeup: "Label close-up", tilt_frame: "Tilt photo", tilt_video: "Tilt video", backlit: "Backlit label", edge: "Edge close-ups", uv: "Blacklight (UV) photo", security_closeup: "Microprint close-up", reference_front: "Reference image" };
 
 function Narrative({ report, sessionId, canNarrate }: { report: any; sessionId?: string; canNarrate?: boolean }) {
   const [n, setN] = useState<any>(report.narrative ?? null);
@@ -66,6 +66,53 @@ function Narrative({ report, sessionId, canNarrate }: { report: any; sessionId?:
   );
 }
 
+function QuickSummaryCard({ q, sessionId }: { q: any; sessionId?: string }) {
+  const col = (title: string, tone: string, items: React.ReactNode[], empty: string) => (
+    <div>
+      <div className="small" style={{ fontWeight: 700, color: `var(--${tone})`, textTransform: "uppercase", letterSpacing: ".04em" }}>{title}</div>
+      {items.length ? <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{items.map((x, i) => <li key={i} style={{ marginBottom: 4 }}>{x}</li>)}</ul> : <p className="small muted" style={{ marginTop: 6 }}>{empty}</p>}
+    </div>
+  );
+  return (
+    <section className="card stack" aria-labelledby="summary">
+      <h2 id="summary" style={{ marginBottom: 0 }}>{q.headline}</h2>
+      <div className="grid grid-2">
+        {col("Verified", "ok", q.verified, "Nothing could be verified against official data yet.")}
+        {col("Looks inconsistent", "bad", q.inconsistent.map((x: any) => <><Pill tone={x.severity === "high" ? "bad" : "warn"}>{x.severity}</Pill> {x.text}</>), "Nothing looks inconsistent.")}
+        {col("Can't see from these photos", "muted", q.cantSee, "—")}
+        {col("Ask / photograph next", "accent", q.askNext, "—")}
+      </div>
+      {sessionId && q.deepCheckRecommended && (
+        <div className="row spread banner warn">
+          <span className="small"><strong>Deep check recommended.</strong> A few extra photos would resolve the open questions. Re-analysis of this slab is free.</span>
+          <Link className="btn primary" href={`/scan?session=${sessionId}&deep=1`}>Start deep check</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ImageQualityTable({ rows }: { rows: any[] }) {
+  const ISSUE: Record<string, string> = { blur: "Blurry", motion_blur: "Motion blur", label_blur: "Label soft", glare: "Glare", low_resolution: "Low resolution", underexposed: "Too dark", overexposed: "Too bright", edges_cut_off: "Edges cut off", steep_angle: "Angled", subject_too_small: "Too small", too_few_frames: "Few distinct frames" };
+  return (
+    <section className="card scroll-x" aria-labelledby="iq">
+      <h2 id="iq">Photo quality</h2>
+      <table className="table small">
+        <thead><tr><th>Photo</th><th>Quality</th><th>Issues</th><th>Limited these checks</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.imageId}>
+            <td>{ROLE_LABEL[r.role] ?? r.role}</td>
+            <td><Pill tone={r.duplicateOf ? "warn" : r.ok && r.score >= 0.8 ? "ok" : r.ok ? "warn" : "bad"}>{r.duplicateOf ? `duplicate of ${r.duplicateOf}` : `${Math.round(r.score * 100)}%`}</Pill></td>
+            <td>{r.issues.length ? r.issues.map((i: any) => ISSUE[i.issue] ?? i.issue).join(", ") : "—"}</td>
+            <td>{r.limits.length ? r.limits.join("; ") : "—"}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <p className="small muted">Where photo quality limited a check, the check is shown as inconclusive rather than guessed.</p>
+    </section>
+  );
+}
+
 export function ReportView({ report, privateImages = true, history, sessionId, canNarrate }: { report: any; privateImages?: boolean; history?: { analysis_run: number; assessment: string; evidence: string; created_at: string }[]; sessionId?: string; canNarrate?: boolean }) {
   const e = report.engine;
   const a = ASSESS[e.assessment];
@@ -83,6 +130,7 @@ export function ReportView({ report, privateImages = true, history, sessionId, c
   };
   return (
     <div className="stack">
+      {report.quickSummary && <QuickSummaryCard q={report.quickSummary} sessionId={sessionId} />}
       <div className={`banner ${a?.tone}`} role="status">
         <div className="row spread">
           <div><div className="small muted">Overall assessment</div><div style={{ fontSize: "1.3rem", fontWeight: 750 }}>{a?.label}</div></div>
@@ -188,6 +236,7 @@ export function ReportView({ report, privateImages = true, history, sessionId, c
       {e.observations.some((o: Obs) => o.category === "image_integrity") && section("Image integrity", ["image_integrity"])}
       {sessionId && <MarketValue sessionId={sessionId} assessment={e.assessment} />}
 
+      {report.imageQuality?.length > 0 && <ImageQualityTable rows={report.imageQuality} />}
       {history && history.length > 1 && (
         <section className="card">
           <h2>Assessment history</h2>

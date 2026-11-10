@@ -39,7 +39,7 @@ function Capture({ label, hint, role, multiple, onUpload, images, attestation, i
   const last = mine[mine.length - 1];
   return (
     <div className={`capture ${mine.length ? "has" : ""}`} style={highlight ? { borderColor: "var(--accent)", borderStyle: "solid" } : undefined}>
-      {live && <LiveCamera mode={isVideo ? "video" : "photo"} label={label} onClose={() => setLive(false)} onCapture={async (b, name) => { setLive(false); setBusy(true); try { await onUpload(role, b, attestation, name); } finally { setBusy(false); } }} />}
+      {live && <LiveCamera mode={isVideo ? "video" : "photo"} target={["front", "back"].includes(role) ? "slab" : "closeup"} label={label} onClose={() => setLive(false)} onCapture={async (b, name) => { setLive(false); setBusy(true); try { await onUpload(role, b, attestation, name); } finally { setBusy(false); } }} />}
       <h3>{label}</h3>
       <p className="small muted">{hint}</p>
       <input ref={ref} type="file" accept={isVideo ? "video/mp4,video/quicktime,video/webm" : "image/jpeg,image/png,image/webp"} capture={inHand && !role.startsWith("reference") ? "environment" : undefined} multiple={multiple} hidden
@@ -78,6 +78,9 @@ export function ScanWizard() {
   const [att, setAtt] = useState("");
   const [busy, setBusy] = useState(false);
   const [focusRole, setFocusRole] = useState<string | null>(null);
+  // Tiered flow: quick scan by default (front, back, label, cert → analyze); deep check adds security
+  // captures and a reference image, opted into here or requested by the report.
+  const [deep, setDeep] = useState(false);
   const [gradeIn, setGradeIn] = useState("");
   const [askIn, setAskIn] = useState("");
   const [titleIn, setTitleIn] = useState("");
@@ -87,7 +90,9 @@ export function ScanWizard() {
     const id = p.get("session");
     const role = p.get("role");
     const stepFor: Record<string, number> = { uv: 4, front: 1, back: 1, label_closeup: 2, tilt_frame: 4, tilt_video: 4, backlit: 4, edge: 4, security_closeup: 4, reference_front: 5, reference_back: 5 };
-    if (id) api<Session>(`/api/sessions/${id}`).then((s) => { setSession(s); setCert(s.certNumber ?? ""); setGrader(s.grader ?? ""); setStep(role ? stepFor[role] ?? 1 : 1); setFocusRole(role); });
+    const wantDeep = p.get("deep") === "1" || (!!role && (stepFor[role] ?? 1) >= 4);
+    if (wantDeep) setDeep(true);
+    if (id) api<Session>(`/api/sessions/${id}`).then((s) => { setSession(s); setCert(s.certNumber ?? ""); setGrader(s.grader ?? ""); setStep(role ? stepFor[role] ?? 1 : wantDeep ? 4 : 1); setFocusRole(role); });
   }, []);
 
   const inHand = session?.mode !== "online_listing";
@@ -135,7 +140,8 @@ export function ScanWizard() {
         gradeLabel: gradeIn && grader ? `${grader} ${gradeIn.replace(/[^\d.]/g, "")}` : undefined,
         itemTitle: titleIn || undefined, askingPriceCents: askIn ? Math.round(Number(askIn) * 100) : undefined,
       } }));
-      setStep(4);
+      if (deep) setStep(4);
+      else await analyze(); // quick scan goes straight to analysis
     } catch (e) { setErr(e); }
   }
   async function analyze() {
@@ -150,7 +156,7 @@ export function ScanWizard() {
   const usage = me.data?.usage;
   const willCharge = session?.creditState !== "consumed";
   const outOfCredits = usage && usage.totalRemaining === 0 && willCharge;
-  const steps = ["Mode", "Front & back", "Label", "Certification", "Security", "Reference", "Analyze"];
+  const steps = deep ? ["Mode", "Front & back", "Label", "Certification", "Security", "Reference", "Analyze"] : ["Mode", "Front & back", "Label", "Certification"];
   const errBody = err instanceof ApiError ? err.body : null;
 
   return (
@@ -174,6 +180,10 @@ export function ScanWizard() {
             <div className="banner warn small">Limited checks for {cat.name.toLowerCase()}: our reference library for these graders is still being researched, so most holder checks will be inconclusive. Certificate links, photo-quality checks and reference-image comparison still work.</div>
           )}
           {cat?.subcategories.length ? <p className="small muted">Includes: {cat.subcategories.join(", ")}</p> : null}
+          <label className="row small" style={{ fontWeight: 400 }}>
+            <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} style={{ width: 20, minHeight: 20 }} />
+            <span><strong>Deep check</strong> — also capture holograms, UV, edges and a reference image now. Otherwise we start with a quick scan and ask for extra photos only if something needs a closer look.</span>
+          </label>
         </div>
         <div className="grid grid-2">
           <button className="card btn" style={{ display: "block", textAlign: "left", height: "auto" }} onClick={() => start("in_hand").catch(setErr)}>
@@ -193,14 +203,14 @@ export function ScanWizard() {
             <Capture label="Front" hint={guide?.front ?? "Whole holder, all four edges visible, straight on, no glare."} role="front" highlight={focusRole === "front"} onUpload={upload} images={images} inHand={inHand} />
             <Capture label="Back" hint={guide?.back ?? "Flip it over. Same framing as the front."} role="back" highlight={focusRole === "back"} onUpload={upload} images={images} inHand={inHand} />
           </div>
-          <div className="row spread"><span className="small muted">Photos and retakes never use a credit.</span><button className="btn primary" disabled={!images.some((i) => i.role === "front")} onClick={() => setStep(2)}>Continue</button></div>
+          <div className="row spread"><span className="small muted">Photos and retakes never use a credit.</span><button className="btn primary" disabled={!images.some((i) => i.role === "front") || !images.some((i) => i.role === "back")} title="Front and back photos are both required" onClick={() => setStep(2)}>Continue</button></div>
         </div>
       )}
 
       {step === 2 && session && (
         <div className="stack">
           <Capture label="Certification label close-up" hint={guide?.label ?? "Fill the frame with the label. Make sure the number and QR/barcode are sharp."} role="label_closeup" highlight={focusRole === "label_closeup"} onUpload={upload} images={images} inHand={inHand} />
-          <div className="row spread"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={busy} onClick={async () => { await readLabel(); setStep(3); }}>{busy ? "Reading label…" : "Read label"}</button></div>
+          <div className="row spread"><button className="btn" onClick={() => setStep(1)}>Back</button><div className="row"><button className="btn" disabled={busy} onClick={async () => { await readLabel(); setStep(3); }} title="Read the label from your front photo">Skip close-up</button><button className="btn primary" disabled={busy} onClick={async () => { await readLabel(); setStep(3); }}>{busy ? "Reading label…" : "Read label"}</button></div></div>
         </div>
       )}
 
@@ -220,7 +230,7 @@ export function ScanWizard() {
             {!inHand && <div className="field"><label htmlFor="ap">Asking price (USD, optional)</label><input id="ap" inputMode="decimal" value={askIn} onChange={(e) => setAskIn(e.target.value.replace(/[^\d.]/g, ""))} /></div>}
           </div>
           <div className="field"><label htmlFor="it">Item description (if the grader has no online record)</label><input id="it" placeholder="e.g. 1999 Pokémon Base Set Charizard #4" value={titleIn} onChange={(e) => setTitleIn(e.target.value)} /></div>
-          <div className="row spread"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={!grader || !cert} onClick={confirmCert}>Confirm</button></div>
+          <div className="row spread"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={!grader || !cert || busy} onClick={confirmCert}>{deep ? "Confirm" : busy ? "Starting…" : "Analyze (quick scan)"}</button></div>
         </div>
       )}
 

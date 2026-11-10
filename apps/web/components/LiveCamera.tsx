@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { analyzeFrame, hintsFor, toFrame, type Frame, type Hint } from "@/lib/client/frame-analysis";
 
 /**
  * Live camera with real-time framing guidance (runs on-device, nothing is uploaded until capture).
@@ -7,31 +8,9 @@ import { useEffect, useRef, useState } from "react";
  * Capture is enabled once the frame has been steady and sharp for ~0.75s.
  * "video" mode records a short tilt clip with MediaRecorder (no liveness claim is made).
  */
-type Hint = { ok: boolean; text: string };
-const W = 200;
+const W = 240;
 
-function analyze(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const d = ctx.getImageData(0, 0, w, h).data;
-  const g = new Float32Array(w * h);
-  let sum = 0, glare = 0;
-  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-    const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    g[p] = v;
-    sum += v;
-    if (d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250) glare++;
-  }
-  let lapSum = 0, lapSq = 0, n = 0;
-  for (let y = 1; y < h - 1; y++)
-    for (let x = 1; x < w - 1; x++) {
-      const p = y * w + x;
-      const l = g[p - 1] + g[p + 1] + g[p - w] + g[p + w] - 4 * g[p];
-      lapSum += l; lapSq += l * l; n++;
-    }
-  const mean = sum / (w * h);
-  return { mean, glare: glare / (w * h), sharp: lapSq / n - (lapSum / n) ** 2 };
-}
-
-export function LiveCamera({ mode, label, onCapture, onClose }: { mode: "photo" | "video"; label: string; onCapture: (b: Blob, name: string) => void; onClose: () => void }) {
+export function LiveCamera({ mode, label, onCapture, onClose, target = "slab" }: { mode: "photo" | "video"; label: string; onCapture: (b: Blob, name: string) => void; onClose: () => void; target?: "slab" | "closeup" }) {
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hints, setHints] = useState<Hint[]>([]);
@@ -39,6 +18,11 @@ export function LiveCamera({ mode, label, onCapture, onClose }: { mode: "photo" 
   const [err, setErr] = useState<string | null>(null);
   const [recording, setRecording] = useState(0);
   const steady = useRef(0);
+  const prev = useRef<Frame | null>(null);
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number; w: number; h: number } | null>(null);
+  const [auto, setAuto] = useState(true);
+  const autoRef = useRef(true);
+  const captured = useRef(false);
   const stream = useRef<MediaStream | null>(null);
 
   useEffect(() => {
@@ -56,16 +40,17 @@ export function LiveCamera({ mode, label, onCapture, onClose }: { mode: "photo" 
           c.width = W; c.height = h;
           const ctx = c.getContext("2d", { willReadFrequently: true })!;
           ctx.drawImage(v, 0, 0, W, h);
-          const m = analyze(ctx, W, h);
-          const hs: Hint[] = [
-            { ok: m.sharp > 60, text: m.sharp > 60 ? "In focus" : "Hold steady — tap the label to focus" },
-            { ok: m.mean > 60 && m.mean < 215, text: m.mean <= 60 ? "Too dark — add even light" : m.mean >= 215 ? "Too bright — reduce direct light" : "Exposure OK" },
-            { ok: m.glare < 0.03, text: m.glare < 0.03 ? "No strong glare" : "Glare — tilt the slab slightly away from the light" },
-          ];
-          if (v.videoWidth < 1600) hs.push({ ok: false, text: `Camera resolution is low (${v.videoWidth}px) — fine details may be inconclusive` });
-          steady.current = hs.slice(0, 3).every((x) => x.ok) ? steady.current + 1 : 0;
+          const f = toFrame(ctx.getImageData(0, 0, W, h).data, W, h);
+          const checks = analyzeFrame(f, prev.current);
+          prev.current = f;
+          const { hints: hs, ready: ok } = hintsFor(checks, target);
+          if (v.videoWidth < 1600) hs.push({ key: "res", ok: true, text: `Camera ${v.videoWidth}px — fine details may be inconclusive` });
+          steady.current = ok ? steady.current + 1 : 0;
           setReady(steady.current >= 3);
           setHints(hs);
+          setBox(checks.box ? { ...checks.box, w: W, h } : null);
+          // Auto-capture after ~1 s of passing checks (photo mode only, once).
+          if (mode === "photo" && autoRef.current && steady.current >= 4 && !captured.current) { captured.current = true; snap(); }
         }, 250);
       })
       .catch(() => setErr("Camera unavailable. Allow camera access, or use “Upload photo” instead."));
@@ -104,6 +89,11 @@ export function LiveCamera({ mode, label, onCapture, onClose }: { mode: "photo" 
     <div role="dialog" aria-modal="true" aria-label={`${label} camera`} style={{ position: "fixed", inset: 0, background: "#000", zIndex: 50, display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
         <video ref={video} playsInline muted style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        {box && target === "slab" && (
+          <svg aria-hidden viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="xMidYMid meet" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+            <rect x={box.x0} y={box.y0} width={box.x1 - box.x0} height={box.y1 - box.y0} fill="none" stroke={ready ? "#4ade80" : "#fbbf24"} strokeWidth={1.5} />
+          </svg>
+        )}
         {/* Slab-shaped framing guide (holder ≈ 0.62 aspect) */}
         <div aria-hidden style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", height: "82%", aspectRatio: mode === "video" ? "1.6" : "0.62", border: `3px solid ${ready ? "#4ade80" : "rgba(255,255,255,.7)"}`, borderRadius: 12 }} />
         <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", flexWrap: "wrap", gap: 6 }} aria-live="polite">
@@ -116,6 +106,11 @@ export function LiveCamera({ mode, label, onCapture, onClose }: { mode: "photo" 
       <canvas ref={canvas} hidden />
       <div className="row" style={{ padding: 16, justifyContent: "center", gap: 16, background: "#000" }}>
         <button className="btn" onClick={onClose}>Cancel</button>
+        {mode === "photo" && (
+          <label className="row small" style={{ color: "#fff", gap: 6 }}>
+            <input type="checkbox" checked={auto} onChange={(e) => { setAuto(e.target.checked); autoRef.current = e.target.checked; }} style={{ width: 20, minHeight: 20 }} /> Auto-capture
+          </label>
+        )}
         {mode === "photo"
           ? <button className="btn primary" disabled={!ready} onClick={snap} aria-label="Capture photo">{ready ? "Capture" : "Getting ready…"}</button>
           : <button className="btn primary" disabled={!!recording || !!err} onClick={record}>{recording ? "Recording…" : "Record 4s tilt"}</button>}

@@ -312,3 +312,26 @@ def test_phase_c_endpoints_return_json():
                         ("/label-template", {"image": img, "template_image": img})]:
         r = c.post(path, files={k: (f"{k}.jpg", v) for k, v in files.items()})
         assert r.status_code == 200, (path, r.text[:200])
+
+
+# ---------------- Phase D ----------------
+def _motion_blur(img, length=25):
+    k = np.zeros((length, length), np.float32)
+    k[length // 2, :] = 1.0 / length  # horizontal smear
+    return cv2.filter2D(img, -1, k)
+
+
+def test_quality_motion_blur_is_distinguished():
+    sharp = synth.photo(synth.slab(GENUINE), seed=2)
+    q_sharp = quality.assess(sharp, "front")
+    assert "motion_blur" not in [i["issue"] for i in q_sharp["issues"]], q_sharp
+    smeared = quality.assess(_motion_blur(sharp), "front")
+    assert "motion_blur" in [i["issue"] for i in smeared["issues"]], smeared
+    defocus = quality.assess(cv2.GaussianBlur(sharp, (0, 0), 4), "front")
+    assert "motion_blur" not in [i["issue"] for i in defocus["issues"]], defocus  # even blur ≠ motion
+
+
+def test_quality_reports_label_sharpness():
+    img = synth.photo(synth.slab(GENUINE), seed=2)
+    q = quality.assess(img, "front")
+    assert q["metrics"]["labelSharpness"] > 60, q["metrics"]
