@@ -5,6 +5,7 @@ of glow can be the light, the camera, or an older label."""
 from __future__ import annotations
 import cv2
 import numpy as np
+from .versions import TOOL_VERSIONS
 
 
 def fluorescence_map(img: np.ndarray) -> np.ndarray:
@@ -22,7 +23,7 @@ def analyze(uv: np.ndarray, template: np.ndarray | None = None) -> dict:
     frac = float(m.mean())
     hsv = cv2.cvtColor(uv, cv2.COLOR_BGR2HSV)
     scene_violet = float(((hsv[..., 0] > 125) & (hsv[..., 0] < 160) & (hsv[..., 1] > 60)).mean())
-    out = {"fluorescentPct": round(frac * 100, 2), "uvLightLikely": scene_violet > 0.15, "toolVersion": "vision/uv@0.1.0"}
+    out = {"fluorescentPct": round(frac * 100, 2), "uvLightLikely": scene_violet > 0.15, "toolVersion": TOOL_VERSIONS["uv"]}
     if not out["uvLightLikely"]:
         return {**out, "status": "not_visible", "note": "photo doesn't look like it was taken under a blacklight"}
     if template is None:

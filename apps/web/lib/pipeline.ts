@@ -15,6 +15,7 @@ import { marketValueFor } from "./market";
 import { activeTemplate } from "./templates";
 import { activeImages, storeVideoFrames } from "./sessions";
 import { loadLibrary } from "./library";
+import { reportReleaseVersion } from "./releases";
 import { sanitize } from "./metadata";
 import { storage } from "./storage";
 import { vision } from "./vision";
@@ -235,12 +236,18 @@ export async function runAnalysis(sessionId: string) {
     integrity, templates, certSightings, market: { value: marketValue, askingPriceCents: session.asking_price_cents },
   };
   const out = runEngine(input);
+  // Snapshot of exactly what the rules engine saw (library referenced by version) — lets new
+  // rules/library releases be evaluated on labeled sessions without re-uploading anything.
+  const { library: _lib, ...snapshot } = input;
+  await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,'engine_input',$3,$4)`,
+    [sessionId, run, JSON.stringify({ ...snapshot, libraryVersion: lib.meta.version }), JSON.stringify({ source: "computed", tool: out.rulesVersion, retrievedAt: new Date().toISOString() })]);
   const report = buildReport(sessionId, input, out);
+  (report as any).releaseVersion = await reportReleaseVersion();
   (report as any).market = marketValue; // snapshot at analysis time (live value is recomputed on view)
   (report as any).reverseImageStatus = reverseImage.status;
   (report as any).planAtGeneration = ent.planId;
 
-  await q(`insert into verification_reports (session_id,analysis_run,report,rules_version) values ($1,$2,$3,$4)`, [sessionId, run, JSON.stringify(report), out.rulesVersion]);
+  await q(`insert into verification_reports (session_id,analysis_run,report,rules_version,release_version) values ($1,$2,$3,$4,$5)`, [sessionId, run, JSON.stringify(report), out.rulesVersion, (report as any).releaseVersion]);
   for (const f of out.findings) await q(`insert into risk_findings (session_id,analysis_run,severity,pattern,data) values ($1,$2,$3,$4,$5)`, [sessionId, run, f.severity, f.pattern, JSON.stringify(f)]);
   const title = (lookup?.record as OfficialCertRecord | undefined)?.description || (grader && cert ? `${grader} ${cert}` : "Untitled slab");
   await q(

@@ -148,7 +148,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 3. Real-time edge/framing, skew and motion-blur detection, plus region (label) sharpness and auto-capture: web in JS; mobile via a camera frame processor (feasibility check first).
 4. Per-image quality table in the report; category-specific guidance from the library.
 
-**Phase E — Live service and patch notes**
+**Phase E — Live service and patch notes** ✅ done (2026-11-10) — see `docs/PHASE_E.md`
 1. Release object bundling rules + library + vision/model versions; every report references it.
 2. Public and internal changelogs per release (public text reviewed so it never reveals detection methods); in-app version and patch-notes screen.
 3. Ground-truth program: analyst labeling UI, consent-linked sample registry, counterfeit-technique log.

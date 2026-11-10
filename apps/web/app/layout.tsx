@@ -3,6 +3,7 @@ import "./globals.css";
 import Link from "next/link";
 import { ConsentGate } from "@/components/ConsentGate";
 import { Nav } from "@/components/Nav";
+import { VersionLink } from "@/components/VersionLink";
 
 export const metadata: Metadata = {
   title: "SlabGuard — Graded card verification",
@@ -20,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="container small muted" style={{ padding: "24px 16px 40px", borderTop: "1px solid var(--border)" }}>
           Slab Guard reports are guidance based on the photos and records available — <strong>not a guarantee of authenticity</strong>. We never declare an item real or fake.
           <div className="row" style={{ marginTop: 8 }}>
-            <Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/notice-at-collection">Notice at collection</Link><Link href="/account#privacy">Your privacy choices</Link>
+            <Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/notice-at-collection">Notice at collection</Link><Link href="/account#privacy">Your privacy choices</Link><VersionLink />
           </div>
         </footer>
       </body>

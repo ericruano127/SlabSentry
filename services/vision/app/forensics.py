@@ -13,6 +13,7 @@ review" observations, never verdicts.
 from __future__ import annotations
 import cv2
 import numpy as np
+from .versions import TOOL_VERSIONS
 
 ELA_QUALITY = 90
 ELA_BLOCK = 16
@@ -91,4 +92,4 @@ def copy_move(img: np.ndarray) -> dict:
 
 
 def analyze(img: np.ndarray) -> dict:
-    return {"recompression": recompression(img), "copyMove": copy_move(img), "toolVersion": "vision/forensics@0.1.0"}
+    return {"recompression": recompression(img), "copyMove": copy_move(img), "toolVersion": TOOL_VERSIONS["forensics"]}

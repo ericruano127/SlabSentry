@@ -3,6 +3,7 @@ template crop exists — does the fine structure match it?"""
 from __future__ import annotations
 import cv2
 import numpy as np
+from .versions import TOOL_VERSIONS
 
 
 def resolvability(img: np.ndarray) -> dict:
@@ -20,7 +21,7 @@ def resolvability(img: np.ndarray) -> dict:
 
 def analyze(img: np.ndarray, template: np.ndarray | None = None) -> dict:
     res = resolvability(img)
-    out = {**res, "toolVersion": "vision/microprint@0.1.0"}
+    out = {**res, "toolVersion": TOOL_VERSIONS["microprint"]}
     if not res["resolvable"]:
         return {**out, "status": "not_supported_by_device", "note": "fine print isn't resolved in this close-up (focus or camera limit)"}
     if template is None:

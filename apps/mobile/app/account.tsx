@@ -9,7 +9,8 @@ import { Button, Card, T } from "../lib/ui";
 export default function Account() {
   const [me, setMe] = useState<(Me & { consent?: any }) | null>(null);
   const load = () => api<Me>("/api/me").then(setMe);
-  useEffect(() => { load(); }, []);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => { load(); api("/api/releases").then((r) => setVersion(r.current)).catch(() => {}); }, []);
   const u = me?.usage;
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
@@ -31,6 +32,7 @@ export default function Account() {
       </Card>
       <Button title="Plans & restore purchases" onPress={() => router.push("/paywall")} />
       {u?.subscriptionProvider && u.subscriptionProvider !== "stripe" && <Button title="Manage store subscription" onPress={() => Linking.openURL(Platform.OS === "ios" ? "https://apps.apple.com/account/subscriptions" : "https://play.google.com/store/account/subscriptions")} />}
+      <Button title={`What's new${version ? ` · v${version}` : ""}`} onPress={() => Linking.openURL(`${config.apiUrl}/whats-new`)} />
       <Button title="Sign out" onPress={() => supabase.auth.signOut()} />
       <Button title="Sign out of all devices" onPress={() => supabase.auth.signOut({ scope: "global" })} />
       <Button title="Delete account" onPress={() => Alert.alert("Delete account?", "This permanently deletes your account, photos and reports. Store subscriptions must be canceled in the store.", [

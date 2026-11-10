@@ -47,7 +47,8 @@ async def load(f: UploadFile):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "ocr": ocr.available(), "version": app.version}
+    from .versions import TOOL_VERSIONS
+    return {"ok": True, "ocr": ocr.available(), "version": app.version, "tools": TOOL_VERSIONS}
 
 
 @app.post("/quality", dependencies=[Depends(auth)])

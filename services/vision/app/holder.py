@@ -11,7 +11,8 @@ import numpy as np
 from . import geometry, ocr
 from .codes import decode_codes
 
-TOOL_VERSION = "vision/holder@0.1.0"
+from .versions import TOOL_VERSIONS
+TOOL_VERSION = TOOL_VERSIONS["holder"]
 SLAB_W, SLAB_H = 620, 1000
 LABEL_FRAC = 0.22  # label occupies the top ~22% of a canonical upright slab (approximation)
 

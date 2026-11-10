@@ -5,6 +5,7 @@ palette, and holder/label proportions. Without a template everything stays incon
 from __future__ import annotations
 import cv2
 import numpy as np
+from .versions import TOOL_VERSIONS
 from . import geometry
 from .holder import LABEL_FRAC, SLAB_H, SLAB_W
 
@@ -55,7 +56,7 @@ def compare_label(img: np.ndarray, template: np.ndarray, holder_rng=geometry._DE
     # thresholds: deliberately wide until tuned on labeled data
     layout_status = "consistent" if layout >= 0.55 else "potential_discrepancy" if layout < 0.25 else "inconclusive"
     colour_status = "consistent" if colour >= 0.7 else "potential_discrepancy" if colour < 0.35 else "inconclusive"
-    return {"status": "measured", "layout": {"score": round(layout, 3), "status": layout_status}, "colour": {"score": round(colour, 3), "status": colour_status}, "toolVersion": "vision/template@0.1.0"}
+    return {"status": "measured", "layout": {"score": round(layout, 3), "status": layout_status}, "colour": {"score": round(colour, 3), "status": colour_status}, "toolVersion": TOOL_VERSIONS["template"]}
 
 
 def item_hash(img: np.ndarray, item_rng=geometry._DEFAULT) -> dict:

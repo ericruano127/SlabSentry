@@ -20,7 +20,8 @@ from . import fingerprint as fp, geometry, label
 from .hashing import phash, hamming
 from .imaging import glare_mask, to_png_b64
 
-TOOL_VERSION = "vision/compare@0.2.0"
+from .versions import TOOL_VERSIONS
+TOOL_VERSION = TOOL_VERSIONS["compare"]
 CANON_W, CANON_H = 500, 700
 GRID = (6, 8)  # cols, rows
 

@@ -15,6 +15,10 @@ export const PERMISSIONS = {
   "library:read": ["analyst", "admin", "owner"],
   "library:write": ["admin", "owner"],
   "privacy:read": ["support", "admin", "owner"],
+  "quality:read": ["analyst", "admin", "owner"],
+  "quality:label": ["analyst", "admin", "owner"],
+  "releases:write": ["admin", "owner"],
+  "gate:override": ["owner"],
 } as const satisfies Record<string, readonly Role[]>;
 export type Permission = keyof typeof PERMISSIONS;
 
