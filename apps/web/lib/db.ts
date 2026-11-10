@@ -3,6 +3,7 @@ import { env } from "./env";
 
 // Return timestamptz as ISO strings and numerics as numbers.
 pg.types.setTypeParser(1184, (v) => new Date(v).toISOString());
+pg.types.setTypeParser(1082, (v) => v); // date columns stay plain YYYY-MM-DD (no timezone shift)
 pg.types.setTypeParser(1700, (v) => Number(v));
 pg.types.setTypeParser(20, (v) => Number(v));
 

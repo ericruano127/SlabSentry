@@ -80,6 +80,8 @@ export const GenerationSchema = z.object({
   features: z.array(z.string()),
   visualMarkers: z.array(MarkerSchema).default([]),
   notes: z.array(z.string()).default([]),
+  /** Documented physical proportions (short/long side ratio), only when sourced. */
+  proportions: z.object({ holderAspect: z.tuple([z.number().positive(), z.number().positive()]), status: ClaimStatus, source: z.string() }).optional(),
   status: ClaimStatus,
   sources: z.array(z.string()),
 });

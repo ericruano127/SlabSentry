@@ -22,6 +22,9 @@ const Patch = z.object({
   certConfirmed: z.boolean().optional(),
   mode: z.enum(["in_hand", "online_listing"]).optional(),
   status: z.literal("canceled").optional(),
+  gradeLabel: z.string().max(20).nullable().optional(),
+  itemTitle: z.string().max(200).nullable().optional(),
+  askingPriceCents: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
 });
 
 export const PATCH = handle(async (req: Request, ctx: Ctx) => {
@@ -42,5 +45,9 @@ export const PATCH = handle(async (req: Request, ctx: Ctx) => {
        cert_confirmed=coalesce($5,cert_confirmed), mode=coalesce($6,mode), status=coalesce($7,status), category=coalesce($8,category), updated_at=now() where id=$1`,
     [s.id, b.grader ?? null, cert ?? null, b.certSource ?? (cert ? "user" : null), b.certConfirmed ?? null, b.mode ?? null, b.status ?? null, b.category ?? null],
   );
+  if (b.gradeLabel !== undefined || b.itemTitle !== undefined || b.askingPriceCents !== undefined)
+    await q(`update verification_sessions set grade_label = case when $2 then $3 else grade_label end, item_title = case when $4 then $5 else item_title end,
+               asking_price_cents = case when $6 then $7 else asking_price_cents end where id=$1`,
+      [s.id, b.gradeLabel !== undefined, b.gradeLabel ?? null, b.itemTitle !== undefined, b.itemTitle ?? null, b.askingPriceCents !== undefined, b.askingPriceCents ?? null]);
   return json(await sessionView(await getOwnedSession(u.id, s.id)));
 });

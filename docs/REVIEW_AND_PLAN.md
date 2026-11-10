@@ -133,7 +133,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 3. Grading-date resolution: from the official lookup when the grader provides it; otherwise visual generation inference, explicitly labeled "inferred", with lower confidence. Current slab governs (reholders). Item year is never used.
 4. Era-mismatch rule (cert-derived era vs observed label/features). Absence of a newer feature on an older-era slab stays non-flagging (existing behavior kept).
 
-**Phase C — Check expansion**
+**Phase C — Check expansion** ✅ done (2026-11-10) — see `docs/PHASE_C.md` (incl. fair market value)
 1. Cert format and record cross-check from library data, including **set**.
 2. Label layout/typography/spacing/logo/color comparison against **verified label templates** per generation, plus tooling to register templates from verified-authentic samples. Without a template the result is "inconclusive".
 3. Microprint: macro capture, resolvability check, comparison against template crops.

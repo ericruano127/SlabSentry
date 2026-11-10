@@ -47,14 +47,16 @@ def card(art, cut_dx=0, cut_dy=0, border=60, marks_seed=None, chip_seed=None):
     return c
 
 
-def slab(card_img, label_text="PSA 10 GEM MT 12345678", qr_text=None):
+def slab(card_img, label_text="PSA 10 GEM MT 12345678", qr_text=None, label_color=(236, 236, 236), border_color=(40, 40, 200), logo=False):
     ch, cw = card_img.shape[:2]
     W, H = int(cw * 1.28), int(ch * 1.62)
     s = np.full((H, W, 3), 205, np.uint8)
     cv2.rectangle(s, (0, 0), (W - 1, H - 1), (60, 60, 60), 8)
     lh = int(H * 0.18)
-    cv2.rectangle(s, (40, 30), (W - 40, 30 + lh), (236, 236, 236), -1)
-    cv2.rectangle(s, (40, 30), (W - 40, 30 + lh), (40, 40, 200), 6)
+    cv2.rectangle(s, (40, 30), (W - 40, 30 + lh), label_color, -1)
+    cv2.rectangle(s, (40, 30), (W - 40, 30 + lh), border_color, 6)
+    if logo:
+        cv2.circle(s, (W // 2, 30 + lh // 2), lh // 3, (0, 140, 255), -1)
     cv2.putText(s, label_text, (70, 30 + lh // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (0, 0, 0), 3)
     if qr_text:
         enc = cv2.QRCodeEncoder.create().encode(qr_text)

@@ -7,7 +7,7 @@ import { loadLibrary } from "./library";
 import { MetadataError, sanitize, type MetadataSignals } from "./metadata";
 import { vision, VisionUnavailable } from "./vision";
 
-export const ROLES = ["front", "back", "label_closeup", "security_closeup", "edge", "tilt_frame", "tilt_video", "backlit", "detail", "reference_front", "reference_back"] as const;
+export const ROLES = ["front", "back", "label_closeup", "security_closeup", "edge", "tilt_frame", "tilt_video", "backlit", "uv", "detail", "reference_front", "reference_back"] as const;
 export type Role = (typeof ROLES)[number];
 const MULTI = new Set<Role>(["security_closeup", "edge", "tilt_frame", "detail"]);
 
@@ -28,7 +28,7 @@ function sniffMime(b: Buffer): string | null {
 
 export const MAX_VIDEO_SECONDS = 20;
 
-export async function addImage(userId: string, sessionId: string, role: Role, raw: Buffer, opts: { attestation?: string } = {}) {
+export async function addImage(userId: string, sessionId: string, role: Role, raw: Buffer, opts: { attestation?: string; captureNonce?: string } = {}) {
   const mime = sniffMime(raw);
   const isVideo = !!mime?.startsWith("video/");
   if (role === "tilt_video" ? !isVideo : !mime || isVideo) throw new HttpError(415, "unsupported_type", role === "tilt_video" ? "Please upload an MP4, MOV or WebM video." : "Please upload a JPEG, PNG or WebP photo.");
@@ -74,9 +74,15 @@ export async function addImage(userId: string, sessionId: string, role: Role, ra
   const key = `${userId}/${sessionId}/${role}-${sha.slice(0, 16)}.${mime!.split("/")[1]}`;
   await storage.put(key, data, mime!);
   if (!MULTI.has(role)) await q(`update submitted_images set superseded=true where session_id=$1 and role=$2 and is_original and not superseded`, [sessionId, role]);
+  // Live-capture attestation: a one-time code issued to this session within the last 2 minutes.
+  let live = false;
+  if (opts.captureNonce && !isRef) {
+    const n = await one(`update capture_nonces set used_at=now() where nonce=$1 and session_id=$2 and user_id=$3 and used_at is null and issued_at > now() - interval '2 minutes' returning nonce`, [opts.captureNonce, sessionId, userId]);
+    live = !!n;
+  }
   const provenance = isRef
     ? { source: "user_supplied_reference", retrievedAt: new Date().toISOString(), note: opts.attestation }
-    : { source: "user_capture", retrievedAt: new Date().toISOString() };
+    : { source: "user_capture", retrievedAt: new Date().toISOString(), ...(live ? { capture: "live" } : {}) };
   const row = await one(
     `insert into submitted_images (session_id,user_id,role,storage_key,mime,bytes,sha256,quality,provenance,metadata_signals,training_consent,consent_version)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id, role, quality, created_at`,

@@ -13,6 +13,7 @@ const STEPS: Step[] = [
   { role: "tilt_video", title: "Tilt video (optional)", hint: "Record 3–5 seconds slowly tilting the label (~30°) under one light. We pick distinct, sharp frames.", optional: true },
   { role: "backlit", title: "Backlit label (optional, PSA)", hint: "Light behind the label, same framing as the close-up.", optional: true },
   { role: "edge", title: "Holder edges (optional)", hint: "Close-ups of the holder sides and seams.", optional: true, multiple: true },
+  { role: "uv", title: "Blacklight (UV) photo (optional)", hint: "In a dark room, shine a 365–395 nm blacklight on the label and photograph it straight on.", optional: true },
   { role: "reference_front", title: "Reference image (optional)", hint: "If the grader's cert page shows images, add the front image. It will be labeled user-supplied — never as retrieved from the grader. (PSA images are fetched automatically when our PSA integration is enabled.)", optional: true },
 ];
 const ATTESTATIONS = ["Saved from the grader's official cert page", "Screenshot of the grader's official cert page", "Other source (marketplace, seller, etc.)"];
@@ -64,12 +65,14 @@ export default function Scan() {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) return Alert.alert("Camera", "Camera permission is needed to photograph the slab. You can also choose a saved photo.");
     }
+    // In-app camera captures get a single-use code so the report can note a live capture (library picks don't).
+    const nonce = !fromLibrary ? (await api(`/api/sessions/${sessionId}/capture-nonce`, { method: "POST" }).catch(() => null))?.nonce : undefined;
     const res = fromLibrary ? await ImagePicker.launchImageLibraryAsync(opts) : await ImagePicker.launchCameraAsync(opts);
     if (res.canceled) return;
     setBusy(true);
     try {
       for (const a of res.assets) {
-        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation, a.mimeType ?? undefined);
+        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation, a.mimeType ?? undefined, res.assets.length === 1 ? nonce : undefined);
         setShots((s) => ({ ...s, [step.role]: [...(step.multiple ? s[step.role] ?? [] : []), { uri: a.uri, quality: r.image.quality }] }));
       }
     } catch (e: any) {

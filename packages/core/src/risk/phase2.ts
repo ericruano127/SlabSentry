@@ -211,6 +211,11 @@ export function retakeRequests(ctx: {
     push({ role: "backlit", priority: 3, reason: "PSA's LightHouse label effect wasn't checked.", guidance: "Hold a light behind the label and photograph the front with the same framing as your label close-up.", resolves: ["sec.psa_lighthouse"] });
   if (ctx.mode === "in_hand" && ctx.obs.some((o) => o.category === "security_feature" && o.status === "not_visible" && /holo|foil/i.test(o.title)) && !ctx.roles.has("tilt_frame"))
     push({ role: "tilt_video", priority: 3, reason: "Holographic elements weren't observed across angles.", guidance: "Record a 3–5 second video slowly tilting the slab under one light.", resolves: ctx.obs.filter((o) => /holo|foil/i.test(o.title)).map((o) => o.id) });
+  const uvObs = ctx.obs.filter((o) => o.category === "security_feature" && o.status === "not_visible" && /blacklight/.test(o.detail));
+  if (uvObs.length && ctx.mode === "in_hand" && !ctx.roles.has("uv"))
+    push({ role: "uv", priority: 3, reason: "This label has UV-reactive features that need a blacklight photo.", guidance: "In a dark room, shine a 365–395 nm blacklight on the label and photograph it straight on.", resolves: uvObs.map((o) => o.id) });
+  if (ctx.obs.some((o) => /microprint/i.test(o.id) && o.status === "not_supported_by_device") && ctx.mode === "in_hand")
+    push({ role: "security_closeup", priority: 3, reason: "The microprint close-up wasn't sharp enough to resolve fine print.", guidance: "Move as close as the camera can focus (or use the macro/2× lens) on the microprint area, in good light.", resolves: [] });
   if (st("sec.generic_case_integrity") === "not_visible" && !ctx.roles.has("edge") && ctx.mode === "in_hand")
     push({ role: "edge", priority: 3, reason: "Holder edges and seams weren't fully visible.", guidance: "Take close-ups of each side of the holder.", resolves: ["sec.generic_case_integrity"] });
   return out.sort((a, b) => a.priority - b.priority).slice(0, 6);

@@ -1,0 +1,20 @@
+{
+  "_comment": "Market-value providers. A provider is used only when enabled, its token env var is set, and mappingVerified is true. PriceCharting/SportsCardsPro documented basics: token in 't', /api/product?id=, /api/products?q=. The grade→field mapping, name fields and price unit were NOT confirmed from the official docs (not reachable when this was written): confirm them with Admin → Market → 'Check mapping' against a live response before setting mappingVerified to true.",
+  "windowDays": 90,
+  "cacheHours": 24,
+  "providers": {
+    "pricecharting": {
+      "enabled": false,
+      "tokenEnv": "PRICECHARTING_TOKEN",
+      "baseUrl": "https://www.sportscardspro.com",
+      "searchPath": "/api/products",
+      "productPath": "/api/product",
+      "idField": "id",
+      "nameField": "product-name",
+      "setField": "console-name",
+      "priceUnit": "cents",
+      "gradeFields": {},
+      "mappingVerified": false
+    }
+  }
+}

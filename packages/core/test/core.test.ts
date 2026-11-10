@@ -61,9 +61,14 @@ describe("risk engine", () => {
     const out = runEngine(base({ holder: { ...base().holder!, codes: [{ type: "qr", data: "https://www.psacard.com/cert/99999999" }] } }));
     expect(out.findings.map((f) => f.pattern)).toContain("label_modification_possible");
   });
-  it("UV features are not supported by device", () => {
-    const out = runEngine(base({ grader: "CGC" }));
-    expect(out.observations.find((o) => o.id === "sec.cgc_uv_ink")?.status).toBe("not_supported_by_device");
+  it("UV features need a blacklight photo; without a verified template they stay inconclusive", () => {
+    const none = runEngine(base({ grader: "CGC" }));
+    expect(none.observations.find((o) => o.id === "sec.cgc_uv_ink")?.status).toBe("not_visible");
+    expect(none.retakeRequests.map((r) => r.role)).toContain("uv");
+    const noTpl = runEngine(base({ grader: "CGC", templates: { labelTemplateAvailable: false, uv: { status: "potential_discrepancy", templateCompared: false, note: "no fluorescence observed" } } }));
+    expect(noTpl.observations.find((o) => o.id === "sec.cgc_uv_ink")?.status).toBe("inconclusive");
+    const tpl = runEngine(base({ grader: "CGC", templates: { labelTemplateAvailable: false, uv: { status: "consistent", templateCompared: true } } }));
+    expect(tpl.observations.find((o) => o.id === "sec.cgc_uv_ink")?.status).toBe("consistent");
   });
   it("unable to assess without usable front", () => {
     const out = runEngine(base({ images: [], comparisons: [], record: null }));

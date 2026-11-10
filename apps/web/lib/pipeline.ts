@@ -9,7 +9,10 @@ import { consumeCredit, entitlementsFor, releaseCredit } from "./credits";
 import { recordCost } from "./costs";
 import { lookupCert, type LookupResult } from "./graders/lookup";
 import { webDetection } from "./reverse-image";
-import { distinctImages } from "@slabguard/core";
+import { distinctImages, resolveEra } from "@slabguard/core";
+import { recordAndCheck } from "./cert-sightings";
+import { marketValueFor } from "./market";
+import { activeTemplate } from "./templates";
 import { activeImages, storeVideoFrames } from "./sessions";
 import { loadLibrary } from "./library";
 import { sanitize } from "./metadata";
@@ -174,6 +177,40 @@ export async function runAnalysis(sessionId: string) {
     ? { videoId: video.id, durationSec: video.quality.metrics.durationSec, sampled: video.quality.metrics.sampled, distinctFrames: video.quality.metrics.distinctFrames, status: video.quality.ok ? "ok" : "too_few_distinct_frames" }
     : undefined;
 
+  // ---- 5c. Phase C checks: image integrity, verified templates (label/UV/microprint), proportions,
+  //          cert sightings and market value. Each is cached per input image hash.
+  const cachedEvidence = async <T,>(kind: string, key: string, compute: () => Promise<T>): Promise<T> => {
+    const prev = await one(`select data from verification_evidence where session_id=$1 and kind=$2 and data->>'cacheKey'=$3 order by created_at desc limit 1`, [sessionId, kind, key]);
+    if (prev) return prev.data as T;
+    const data: any = { ...(await compute()), cacheKey: key };
+    await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,$3,$4,$5)`, [sessionId, run, kind, JSON.stringify(data), JSON.stringify({ source: "computed", tool: `vision/${kind}`, retrievedAt: new Date().toISOString() })]);
+    return data as T;
+  };
+  const integrity: EngineInput["integrity"] = [];
+  for (const img of [front, label].filter(Boolean)) {
+    const f = await cachedEvidence("forensics", img.sha256, async () => vision.forensics(await load(img)));
+    integrity.push({ imageId: img.id, role: img.role, metadata: img.metadata_signals ?? null, forensics: f, liveCapture: img.provenance?.capture === "live" });
+  }
+  // Generation (era) decides which verified templates apply; same evidence the engine uses.
+  const eraForTemplates = grader ? resolveEra(lib, grader, category.id, {
+    gradingDate: lookup?.record.found ? lookup.record.gradingDate ?? null : null, labelType: lookup?.record.found ? lookup.record.labelType ?? null : null, certNumber: cert,
+    observed: { codes: holder.codes, ocrText: holder.ocrText, tiltChange: holder.tilt?.status === "consistent", backlitChange: holder.backlit?.status === "consistent" },
+  }) : null;
+  const genId = eraForTemplates?.generation?.id ?? null;
+  const [labelTpl, uvTpl, mpTpl] = await Promise.all([activeTemplate(genId, "label"), activeTemplate(genId, "uv"), activeTemplate(genId, "microprint")]);
+  const lt: any = await cachedEvidence("label_template", `${front.sha256}|${genId}|${!!labelTpl}`, async () => vision.labelTemplate(await load(front), labelTpl, geometry));
+  const uvImg = byRole("uv")[0];
+  const closeup = byRole("security_closeup")[0];
+  const templates: EngineInput["templates"] = {
+    labelTemplateAvailable: !!labelTpl, label: lt.label ?? null, proportions: lt.proportions ?? null,
+    uv: uvImg ? await cachedEvidence("uv", `${uvImg.sha256}|${genId}|${!!uvTpl}`, async () => vision.uv(await load(uvImg), uvTpl)) : null,
+    microprint: closeup ? await cachedEvidence("microprint", `${closeup.sha256}|${genId}|${!!mpTpl}`, async () => vision.microprint(await load(closeup), mpTpl)) : null,
+  };
+  const certSightings = grader && cert
+    ? await recordAndCheck({ sessionId, userId: session.user_id, grader, cert, category: category.id, phash: lt.itemHash?.phash ?? null, dhash: lt.itemHash?.dhash ?? null })
+    : undefined;
+  const marketValue = hasFeature(ent, "market_value") ? await marketValueFor({ ...session, grader }, lookup?.record ?? null).catch(() => null) : null;
+
   // ---- 6. Reverse image search (entitlement + configuration gated)
   let reverseImage: EngineInput["reverseImage"] = { status: hasFeature(ent, "reverse_image") ? "not_configured" : "not_entitled", samePhotoUrls: [], similarUrls: [] };
   if (hasFeature(ent, "reverse_image") && env.googleVisionKey) {
@@ -195,9 +232,11 @@ export async function runAnalysis(sessionId: string) {
     record: lookup?.record ?? null, labelOcrText: holder.ocrText,
     images: images.filter((i) => !i.role.startsWith("reference_") && i.role !== "tilt_video").map((i) => ({ id: i.id, role: i.role, quality: i.quality as QualityReport })),
     comparisons, holder, reverseImage, edgeReviews, tiltVideo,
+    integrity, templates, certSightings, market: { value: marketValue, askingPriceCents: session.asking_price_cents },
   };
   const out = runEngine(input);
   const report = buildReport(sessionId, input, out);
+  (report as any).market = marketValue; // snapshot at analysis time (live value is recomputed on view)
   (report as any).reverseImageStatus = reverseImage.status;
   (report as any).planAtGeneration = ent.planId;
 

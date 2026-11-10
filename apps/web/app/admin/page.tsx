@@ -32,7 +32,7 @@ export default function Admin() {
     <div className="stack">
       <div className="row spread"><h1>Admin · unit economics</h1>
         <select aria-label="Window" value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ width: 160 }}>{[7, 30, 90, 365].map((n) => <option key={n} value={n}>Last {n} days</option>)}</select></div>
-      <p className="small muted">Internal only. {d.costs.note} · <a href="/admin/library">Reference library →</a></p>
+      <p className="small muted">Internal only. {d.costs.note} · <a href="/admin/library">Reference library →</a> · <a href="/admin/templates">Verified templates & market data →</a></p>
       <div className="grid grid-3">{tiles.map(([k, v]) => <div key={k} className="card"><div className="small muted">{k}</div><div className="stat" style={{ fontSize: "1.5rem" }}>{v}</div></div>)}</div>
       <div className="grid grid-2">
         <section className="card scroll-x"><h2>Verifications by plan</h2><table className="table small"><thead><tr><th>Plan</th><th>Sessions</th><th>Billable</th><th>Failed</th></tr></thead><tbody>{d.verifications.byPlan.map((r: any) => <tr key={r.plan_id}><td>{r.plan_id}</td><td>{r.sessions}</td><td>{r.billable}</td><td>{r.failed}</td></tr>)}</tbody></table></section>

@@ -1,8 +1,13 @@
 import { resolveEra, type EraResolution } from "../library/era";
 import { defaultLibrary, type CompiledLibrary } from "../library/runtime";
 import type { Generation as HolderGeneration } from "../library/schema";
+import { certSightingRules, integrityRules, priceRules, templateRules } from "./phaseC";
+import type { MarketValue } from "../market/fmv";
 import { distinctImages, edgeReviewRules, labelRules, physicalMatchRules, retakeRequests, tiltVideoRules } from "./phase2";
 import type {
+  CertSightings,
+  ImageIntegrityInput,
+  TemplateComparisons,
   ComparisonResult,
   EdgeReviewResult,
   PhysicalMatch,
@@ -25,7 +30,7 @@ import type {
  * produced: we emit observations, findings and an overall category. A
  * statistical score should only be added after labeled calibration.
  */
-export const RULES_VERSION = "rules-0.2.0";
+export const RULES_VERSION = "rules-0.3.0";
 
 export interface EngineInput {
   mode: VerificationMode;
@@ -42,6 +47,11 @@ export interface EngineInput {
   reverseImage?: { status: "not_configured" | "not_entitled" | "done"; samePhotoUrls: string[]; similarUrls: string[] };
   edgeReviews?: EdgeReviewResult[];
   tiltVideo?: TiltVideoResult;
+  /** Phase C inputs. */
+  integrity?: ImageIntegrityInput[];
+  templates?: TemplateComparisons;
+  certSightings?: CertSightings;
+  market?: { value: MarketValue | null; askingPriceCents?: number | null };
   /** Published reference library (data-driven). Defaults to the built-in seed (tests). */
   library?: CompiledLibrary;
   /** Item category from the library (e.g. sports_cards, tcg, sealed_video_games). */
@@ -139,7 +149,7 @@ export function runEngine(input: EngineInput): EngineOutput {
   // ---------- 2. Description / grade vs label OCR ----------
   if (input.record?.found && input.labelOcrText.length) {
     const label = norm(input.labelOcrText.join(" "));
-    const fields: [string, string | undefined][] = [["grade", input.record.grade], ["year", input.record.year], ["subject", input.record.subject], ["card number", input.record.cardNumber]];
+    const fields: [string, string | undefined][] = [["grade", input.record.grade], ["year", input.record.year], ["subject", input.record.subject], ["card number", input.record.cardNumber], ["set", input.record.brand]];
     const checked = fields.filter(([, v]) => v && norm(v).length >= 1);
     const missing = checked.filter(([, v]) => !label.includes(norm(v!)));
     if (checked.length) {
@@ -229,7 +239,16 @@ export function runEngine(input: EngineInput): EngineOutput {
       const inAllGens = gens.every((g) => g.features.includes(fid));
       let status: Observation["status"] = "inconclusive";
       let detail = f.description;
-      if (f.phoneVerifiable === "no") {
+      if (f.methods.includes("uv_light")) {
+        // UV needs a second photo under a blacklight; we compare the glow pattern only against a verified template.
+        const uv = input.templates?.uv;
+        if (!uv) (status = "not_visible"), (detail += " Add a photo taken under a blacklight (365–395 nm) to check this.");
+        else (status = uv.templateCompared ? uv.status : uv.status === "not_visible" ? "not_visible" : "inconclusive"), (detail += uv.templateCompared ? ` Fluorescence pattern compared with a verified template.` : ` ${uv.note ?? ""} No verified UV template yet for comparison.`);
+      } else if (/microprint/i.test(fid) && input.templates?.microprint) {
+        const mp = input.templates.microprint;
+        status = mp.templateCompared ? mp.status : mp.status === "not_supported_by_device" ? "not_supported_by_device" : "inconclusive";
+        detail += ` ${mp.note ?? (mp.templateCompared ? "Compared with a verified template." : "")}`;
+      } else if (f.phoneVerifiable === "no") {
         status = "not_supported_by_device";
         detail += " Requires specialized equipment or the grader's own service.";
       } else if (fid === "psa_lighthouse") {
@@ -266,6 +285,11 @@ export function runEngine(input: EngineInput): EngineOutput {
   }
 
   edgeReviewRules(input.edgeReviews, add, prov);
+  // ---------- Phase C ----------
+  templateRules(input.templates, era?.generation ?? null, add, findings, prov);
+  integrityRules(input.integrity, input.mode, add, findings, prov);
+  certSightingRules(input.certSightings, add, findings, prov);
+  priceRules(input.mode, input.market?.askingPriceCents, input.market?.value, add, findings, prov);
   tiltVideoRules(input.tiltVideo, add, prov);
 
   // ---------- 9. Evidence quality ----------
@@ -293,6 +317,7 @@ function assessEvidence(input: EngineInput, hasReference: boolean): EvidenceQual
   if (hasReference) points += 2;
   else reasons.push("No reference image to compare against.");
   if (input.comparisons.some((c) => c.result.centering.status !== "inconclusive")) points += 1;
+  if (input.mode === "in_hand" && input.integrity?.some((i) => i.role === "front" && i.liveCapture)) points += 1; // attested in-app capture
   if (input.mode === "online_listing") reasons.push("Seller-provided images: physical possession and liveness cannot be verified.");
   const level = !good("front") ? "insufficient" : points >= 8 ? "strong" : points >= 5 ? "moderate" : points >= 3 ? "limited" : "insufficient";
   return { level: input.mode === "online_listing" && level === "strong" ? "moderate" : level, reasons };

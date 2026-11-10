@@ -78,12 +78,15 @@ export function ScanWizard() {
   const [att, setAtt] = useState("");
   const [busy, setBusy] = useState(false);
   const [focusRole, setFocusRole] = useState<string | null>(null);
+  const [gradeIn, setGradeIn] = useState("");
+  const [askIn, setAskIn] = useState("");
+  const [titleIn, setTitleIn] = useState("");
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     const id = p.get("session");
     const role = p.get("role");
-    const stepFor: Record<string, number> = { front: 1, back: 1, label_closeup: 2, tilt_frame: 4, tilt_video: 4, backlit: 4, edge: 4, security_closeup: 4, reference_front: 5, reference_back: 5 };
+    const stepFor: Record<string, number> = { uv: 4, front: 1, back: 1, label_closeup: 2, tilt_frame: 4, tilt_video: 4, backlit: 4, edge: 4, security_closeup: 4, reference_front: 5, reference_back: 5 };
     if (id) api<Session>(`/api/sessions/${id}`).then((s) => { setSession(s); setCert(s.certNumber ?? ""); setGrader(s.grader ?? ""); setStep(role ? stepFor[role] ?? 1 : 1); setFocusRole(role); });
   }, []);
 
@@ -104,6 +107,11 @@ export function ScanWizard() {
   async function upload(role: string, f: Blob, attestation?: string, name?: string) {
     setErr(null);
     const fd = new FormData();
+    if (name === "capture.jpg") {
+      // In-app live camera capture: attach a single-use code issued to this session.
+      const { nonce } = await api(`/api/sessions/${session!.id}/capture-nonce`, { method: "POST" }).catch(() => ({ nonce: null }));
+      if (nonce) fd.append("captureNonce", nonce);
+    }
     fd.append("file", await prepare(f), name ?? (f as File).name ?? "upload");
     fd.append("role", role);
     if (attestation) fd.append("attestation", attestation);
@@ -122,7 +130,11 @@ export function ScanWizard() {
   async function confirmCert() {
     const src = extract?.candidates.find((c: any) => c.value === cert)?.source ?? "user";
     try {
-      setSession(await api<Session>(`/api/sessions/${session!.id}`, { method: "PATCH", json: { grader: grader || undefined, certNumber: cert || undefined, certSource: src, certConfirmed: !!cert } }));
+      setSession(await api<Session>(`/api/sessions/${session!.id}`, { method: "PATCH", json: {
+        grader: grader || undefined, certNumber: cert || undefined, certSource: src, certConfirmed: !!cert,
+        gradeLabel: gradeIn && grader ? `${grader} ${gradeIn.replace(/[^\d.]/g, "")}` : undefined,
+        itemTitle: titleIn || undefined, askingPriceCents: askIn ? Math.round(Number(askIn) * 100) : undefined,
+      } }));
       setStep(4);
     } catch (e) { setErr(e); }
   }
@@ -203,6 +215,11 @@ export function ScanWizard() {
           </div>
           {extract?.candidates?.length > 1 && <p className="small">Other readings: {extract.candidates.slice(1).map((c: any) => <button key={c.value} className="pill" onClick={() => setCert(c.value)}>{c.value} ({c.source})</button>)}</p>}
           <p className="small muted">Check each digit against the label — OCR can confuse 0/O, 1/7 and 5/S.</p>
+          <div className="grid grid-2">
+            <div className="field"><label htmlFor="gl">Grade on label (for market value)</label><input id="gl" placeholder="e.g. 10" value={gradeIn} onChange={(e) => setGradeIn(e.target.value)} /></div>
+            {!inHand && <div className="field"><label htmlFor="ap">Asking price (USD, optional)</label><input id="ap" inputMode="decimal" value={askIn} onChange={(e) => setAskIn(e.target.value.replace(/[^\d.]/g, ""))} /></div>}
+          </div>
+          <div className="field"><label htmlFor="it">Item description (if the grader has no online record)</label><input id="it" placeholder="e.g. 1999 Pokémon Base Set Charizard #4" value={titleIn} onChange={(e) => setTitleIn(e.target.value)} /></div>
           <div className="row spread"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={!grader || !cert} onClick={confirmCert}>Confirm</button></div>
         </div>
       )}
@@ -215,6 +232,7 @@ export function ScanWizard() {
             <Capture label="Tilt photos (alternative)" hint="Or 3–5 photos of the label at different angles." role="tilt_frame" multiple onUpload={upload} images={images} inHand={inHand} highlight={focusRole === "tilt_frame"} />
             {grader === "PSA" && <Capture label="Backlit label" hint="Same framing as your label close-up, with a light behind the label." role="backlit" highlight={focusRole === "backlit"} onUpload={upload} images={images} inHand={inHand} />}
             <Capture label="Holder edges & seams" hint="Close-ups of each side of the holder." role="edge" highlight={focusRole === "edge"} multiple onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Blacklight (UV) photo" hint="In a dark room, shine a 365–395 nm blacklight on the label and photograph it straight on. Optional." role="uv" highlight={focusRole === "uv"} onUpload={upload} images={images} inHand={inHand} />
             <Capture label="Security close-up" hint="Hologram or fine print, as close as your camera can focus." role="security_closeup" highlight={focusRole === "security_closeup"} multiple onUpload={upload} images={images} inHand={inHand} />
             {guide?.extras.filter((x) => x.role !== "edge").map((x) => (
               <Capture key={x.role + x.title} label={x.title} hint={x.hint} role={x.role} multiple highlight={focusRole === x.role} onUpload={upload} images={images} inHand={inHand} />

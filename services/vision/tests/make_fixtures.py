@@ -35,3 +35,13 @@ edge = np.full((900, 1300, 3), 200, np.uint8)
 edge[450:, :] = 120
 cv2.imwrite(str(out / "edge_clean.jpg"), edge)
 print("phase2 fixtures ok")
+
+# ---- Phase C fixtures ----
+different = synth.card(synth.artwork(99))
+cv2.imwrite(str(out / "front_different_card.jpg"), synth.photo(synth.slab(different, qr_text=qr), seed=8), [cv2.IMWRITE_JPEG_QUALITY, 95])
+cv2.imwrite(str(out / "front_other_label_design.jpg"), synth.photo(synth.slab(genuine, label_color=(60, 170, 60), border_color=(20, 20, 20), logo=True), seed=9), [cv2.IMWRITE_JPEG_QUALITY, 95])
+uvimg = np.zeros((600, 800, 3), np.uint8)
+uvimg[:] = cv2.cvtColor(np.uint8([[[140, 200, 70]]]), cv2.COLOR_HSV2BGR)[0, 0]
+cv2.rectangle(uvimg, (100, 100), (300, 180), (80, 255, 120), -1)
+cv2.imwrite(str(out / "uv_label.jpg"), uvimg, [cv2.IMWRITE_JPEG_QUALITY, 95])
+print("phase C fixtures ok")

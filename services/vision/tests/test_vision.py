@@ -218,3 +218,97 @@ def test_geometry_form_field():
     from app.geometry import parse_geometry, _DEFAULT
     assert parse_geometry(None) == (_DEFAULT, _DEFAULT)
     assert parse_geometry('{"itemAspect": null, "holderAspect": [0.5, 0.7]}') == (None, (0.5, 0.7))
+
+
+# ---------------- Phase C ----------------
+from app import forensics, microprint, template, uv  # noqa: E402
+from app.hashing import hamming  # noqa: E402
+
+
+def _jpeg(img, q=92):
+    return cv2.imdecode(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, q])[1], cv2.IMREAD_COLOR)
+
+
+def test_copy_move_detects_cloned_region():
+    clean = _jpeg(synth.photo(synth.slab(GENUINE), seed=11))
+    assert forensics.copy_move(clean)["status"] == "consistent"
+    forged = clean.copy()
+    h, w = forged.shape[:2]
+    patch = forged[int(h * 0.45):int(h * 0.45) + 200, int(w * 0.30):int(w * 0.30) + 240].copy()
+    forged[int(h * 0.70):int(h * 0.70) + 200, int(w * 0.55):int(w * 0.55) + 240] = patch
+    r = forensics.copy_move(forged)
+    assert r["status"] == "inconclusive" and r["regions"], r
+
+
+def _uv_scene(rect):
+    img = np.zeros((600, 800, 3), np.uint8)
+    img[:] = cv2.cvtColor(np.uint8([[[140, 200, 70]]]), cv2.COLOR_HSV2BGR)[0, 0]  # violet-lit dark scene
+    x, y, w, h = rect
+    cv2.rectangle(img, (x, y), (x + w, y + h), (80, 255, 120), -1)  # green-ish fluorescence
+    return img
+
+
+def test_uv_pattern_vs_template():
+    a, same, other = _uv_scene((100, 100, 200, 80)), _uv_scene((105, 102, 200, 80)), _uv_scene((500, 400, 200, 80))
+    assert uv.analyze(a, same)["status"] == "consistent"
+    assert uv.analyze(a, other)["status"] == "potential_discrepancy"
+    assert uv.analyze(a)["status"] == "inconclusive"
+    assert uv.analyze(synth.photo(synth.slab(GENUINE), seed=1))["status"] == "not_visible"
+
+
+def _microtext(seed=0):
+    img = np.full((900, 1200, 3), 240, np.uint8)
+    rng = np.random.default_rng(seed)
+    for row in range(0, 900, 14):
+        txt = "".join(rng.choice(list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), 90))
+        cv2.putText(img, txt, (5, row + 11), cv2.FONT_HERSHEY_PLAIN, 0.8, (30, 30, 30), 1)
+    return img
+
+
+def test_microprint_resolvability_and_template():
+    sharp = _microtext(1)
+    r = microprint.analyze(sharp)
+    assert r["resolvable"] and r["status"] == "inconclusive"
+    blurred = cv2.GaussianBlur(sharp, (0, 0), 6)
+    assert microprint.analyze(blurred)["status"] == "not_supported_by_device"
+    assert microprint.analyze(sharp, _microtext(1))["status"] == "consistent"
+
+
+def test_label_template_layout_and_colour():
+    ref = synth.photo(synth.slab(GENUINE, label_text="PSA 10 GEM MT 12345678"), seed=1)
+    tpl, _ = template.label_crop(ref)
+    same_design = synth.photo(synth.slab(GENUINE, label_text="PSA 9 MINT 87651234"), seed=3)
+    r = template.compare_label(same_design, tpl)
+    assert r["layout"]["status"] != "potential_discrepancy" and r["colour"]["status"] == "consistent", r
+    other = synth.photo(synth.slab(GENUINE, label_color=(60, 170, 60), border_color=(20, 20, 20), logo=True), seed=4)  # different label design
+    r2 = template.compare_label(other, tpl)
+    assert r2["status"] == "measured" and r2["colour"]["status"] == "potential_discrepancy", r2
+
+
+def test_item_hash_same_vs_different_item():
+    a = template.item_hash(synth.photo(synth.slab(GENUINE), seed=1))
+    b = template.item_hash(synth.photo(synth.slab(GENUINE), angle=2, scale=0.85, seed=5))
+    c = template.item_hash(synth.photo(synth.slab(OTHER_CARD), seed=8))
+    d = lambda x, y: hamming(int(x["phash"], 16), int(y["phash"], 16))
+    assert d(a, b) <= 10, d(a, b)
+    assert d(a, c) >= 20, d(a, c)
+    p = template.proportions(synth.photo(synth.slab(GENUINE), seed=1))
+    assert p["status"] == "measured" and 0.5 < p["holderAspect"] < 0.7
+
+
+def test_copy_move_no_false_positives_on_clean_slabs():
+    """Repeated glyphs/corners on genuine labels must not trigger duplication flags."""
+    for card in (GENUINE, OTHER_CARD, OTHER_COPY):
+        for seed in (3, 7, 13):
+            assert forensics.copy_move(_jpeg(synth.photo(synth.slab(card), seed=seed)))["status"] == "consistent", seed
+
+
+def test_phase_c_endpoints_return_json():
+    """Regression: NumPy types must be converted before FastAPI serializes responses."""
+    c = TestClient(app)
+    enc = lambda im: cv2.imencode(".jpg", im)[1].tobytes()
+    img = enc(synth.photo(synth.slab(GENUINE), seed=2))
+    for path, files in [("/forensics", {"image": img}), ("/uv", {"image": img}), ("/microprint", {"image": img}),
+                        ("/label-template", {"image": img, "template_image": img})]:
+        r = c.post(path, files={k: (f"{k}.jpg", v) for k, v in files.items()})
+        assert r.status_code == 200, (path, r.text[:200])

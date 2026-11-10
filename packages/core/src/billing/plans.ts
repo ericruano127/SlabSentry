@@ -18,6 +18,7 @@ export const FEATURE_KEYS = [
   "scan_queue",
   "batch_pdf_export",
   "priority_processing",
+  "market_value",
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 

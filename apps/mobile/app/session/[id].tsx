@@ -9,10 +9,12 @@ export default function SessionReport() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [s, setS] = useState<any>(null);
   const [narrative, setNarrative] = useState<any>(null);
+  const [market, setMarket] = useState<any>(null);
   const load = useCallback(async () => {
     const x = await api(`/api/sessions/${id}`);
     setS(x);
     if (x.report?.narrative) setNarrative(x.report.narrative);
+    api(`/api/sessions/${id}/market`).then(setMarket).catch(() => setMarket(null));
   }, [id]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -60,6 +62,16 @@ export default function SessionReport() {
             {narrative ? <T size={14}>{narrative.text}</T> : <Button title="Explain this report (Pro)" onPress={async () => { try { setNarrative((await api(`/api/sessions/${id}/narrative`, { method: "POST" })).narrative); } catch (e: any) { Alert.alert("Explanation", e.message); } }} />}
             {narrative?.source === "ai" && <T muted size={12}>AI-assisted from the findings; it cannot change them.</T>}
           </Card>
+          {market?.value && (
+            <Card>
+              <T bold>Market value{market.value.gradeLabel ? ` · ${market.value.gradeLabel}` : ""} (if genuine)</T>
+              {market.value.estimateCents != null
+                ? <T size={20} bold>${(market.value.estimateCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}</T>
+                : <T muted>No estimate yet</T>}
+              {r.engine.assessment === "high_risk_inconsistencies" && <T color={t.bad} size={13}>Applies only if genuine — the findings above suggest the real value may be far lower.</T>}
+              <T muted size={12}>{market.value.note} Add comparable sales on the website.</T>
+            </Card>
+          )}
           <Card><T bold>Recommended next action</T>{r.engine.nextActions.map((a: string, n: number) => <T key={a}>{n + 1}. {a}</T>)}</Card>
           <Card>
             <T bold>Official verification</T>

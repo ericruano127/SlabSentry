@@ -14,6 +14,6 @@ export const POST = handle(async (req: Request, ctx: { params: Promise<{ id: str
   const role = String(fd.get("role") ?? "");
   if (!(file instanceof Blob)) throw new HttpError(400, "missing_file", "No photo attached.");
   if (!ROLES.includes(role as Role)) throw new HttpError(400, "invalid_role", "Unknown photo type.");
-  const row = await addImage(u.id, s.id, role as Role, Buffer.from(await file.arrayBuffer()), { attestation: fd.get("attestation")?.toString() });
+  const row = await addImage(u.id, s.id, role as Role, Buffer.from(await file.arrayBuffer()), { attestation: fd.get("attestation")?.toString(), captureNonce: fd.get("captureNonce")?.toString() });
   return json({ image: row }, 201);
 });

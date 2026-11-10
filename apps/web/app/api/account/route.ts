@@ -5,6 +5,7 @@ import { tx } from "@/lib/db";
 import { env } from "@/lib/env";
 import { handle, HttpError, json } from "@/lib/http";
 import { storage } from "@/lib/storage";
+import { deleteUserSightings } from "@/lib/cert-sightings";
 import { subscriptionGrantsAccess } from "@slabguard/core";
 
 /** Permanently delete the account, photos and reports. Store subscriptions must be canceled in the store. */
@@ -19,6 +20,7 @@ export const DELETE = handle(async (req: Request) => {
       await stripe().subscriptions.cancel(s.provider_subscription_id).catch(() => {});
   }
   await storage.removePrefix(u.id);
+  await deleteUserSightings(u.id);
   await tx(async (c) => {
     await c.query(`insert into privacy_requests (user_id,kind,status,completed_at) values ($1,'deletion','completed',now())`, [u.id]);
     // Billing/payment rows are retained (user_id nulled) for accounting; everything else cascades.

@@ -62,6 +62,8 @@ export interface Observation {
     | "security_feature"
     | "tampering"
     | "image_reuse"
+    | "image_integrity"
+    | "market"
     | "evidence_quality";
   title: string;
   status: CheckStatus;
@@ -210,7 +212,9 @@ export interface RiskFinding {
     | "listing_photo_reuse"
     | "screenshot_of_reference"
     | "insufficient_evidence"
-    | "era_mismatch";
+    | "era_mismatch"
+    | "image_edit_indicators"
+    | "price_anomaly";
   summary: string;
   explanation: string;
   observationIds: string[];
@@ -220,4 +224,25 @@ export interface RiskFinding {
 export interface EvidenceQuality {
   level: "strong" | "moderate" | "limited" | "insufficient";
   reasons: string[];
+}
+
+/** Phase C analysis inputs (all optional; absent = not captured / not configured). */
+export interface ImageIntegrityInput {
+  imageId: string;
+  role: string;
+  metadata?: { editorDetected?: boolean; software?: string | null; hadCameraMakeModel?: boolean; hadExif?: boolean; trailingBytesRemoved?: number } | null;
+  forensics?: { recompression: { status: CheckStatus; regions?: Region[] }; copyMove: { status: CheckStatus; regions?: Region[] } } | null;
+  liveCapture?: boolean;
+}
+export interface TemplateComparisons {
+  label?: { status: "measured" | "not_visible"; layout?: { score: number; status: CheckStatus }; colour?: { score: number; status: CheckStatus } } | null;
+  labelTemplateAvailable: boolean;
+  uv?: { status: CheckStatus; templateCompared?: boolean; fluorescentPct?: number; note?: string } | null;
+  microprint?: { status: CheckStatus; templateCompared?: boolean; resolvable?: boolean; note?: string } | null;
+  proportions?: { status: "measured" | "not_visible"; holderAspect?: number; angleDeviationDeg?: number } | null;
+}
+export interface CertSightings {
+  otherSessions: number; // other uploads with the same grader+cert (pseudonymous, any user)
+  visuallyDifferent: number; // of those, the item looked clearly different
+  comparable: number; // of those, item fingerprints were available to compare
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
 import { AuthImage } from "./AuthImage";
+import { MarketValue } from "./MarketValue";
 import { ASSESS, fmtDate, Pill, STATUS } from "./ui";
 
 type Obs = { id: string; category: string; title: string; status: string; detail: string; basis: string; imageRefs?: string[]; regions?: { x: number; y: number; w: number; h: number; label?: string }[]; provenance: { source: string; url?: string } };
@@ -40,7 +41,7 @@ const ERA_BASIS: Record<string, string> = {
   only_known_generation: "Only documented generation",
   unknown: "Unknown",
 };
-const ROLE_LABEL: Record<string, string> = { front: "Front photo", back: "Back photo", label_closeup: "Label close-up", backlit: "Backlit label", tilt_video: "Tilt video", edge: "Edge close-ups", reference_front: "Reference image" };
+const ROLE_LABEL: Record<string, string> = { uv: "Blacklight (UV) photo", security_closeup: "Microprint close-up", front: "Front photo", back: "Back photo", label_closeup: "Label close-up", backlit: "Backlit label", tilt_video: "Tilt video", edge: "Edge close-ups", reference_front: "Reference image" };
 
 function Narrative({ report, sessionId, canNarrate }: { report: any; sessionId?: string; canNarrate?: boolean }) {
   const [n, setN] = useState<any>(report.narrative ?? null);
@@ -184,6 +185,8 @@ export function ReportView({ report, privateImages = true, history, sessionId, c
           </div>
         ))}
       {section("Certification & identity checks", ["certification", "identity", "evidence_quality"])}
+      {e.observations.some((o: Obs) => o.category === "image_integrity") && section("Image integrity", ["image_integrity"])}
+      {sessionId && <MarketValue sessionId={sessionId} assessment={e.assessment} />}
 
       {history && history.length > 1 && (
         <section className="card">
