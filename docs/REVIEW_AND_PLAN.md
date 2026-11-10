@@ -154,7 +154,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 3. Ground-truth program: analyst labeling UI, consent-linked sample registry, counterfeit-technique log.
 4. Accuracy dashboard per category / grader / generation (missed fakes vs false flags, configurable cost weight, default 5×). Releases are gated on no accuracy regression. Model-registry scaffolding for future learned models.
 
-**Phase F — Scale and operations**
+**Phase F — Scale and operations** ✅ done (2026-11-10) — see `docs/PHASE_F.md` and `docs/SCALING.md` (OpenTelemetry traces deferred; request-id logs + Prometheus metrics instead)
 1. Redis (or equivalent) for rate limits and a global PSA quota/throttle; connection pooling; job progress %; signed CDN URLs for images.
 2. Autoscaling templates for API and workers; health checks; degradation matrix documented and tested.
 3. Observability: OpenTelemetry traces, error tracking, alerts.

@@ -1,0 +1,74 @@
+{
+  "base": "http://localhost:3100",
+  "users": 2000,
+  "at": "2026-11-10T20:57:59.248Z",
+  "node": "v22.23.4",
+  "results": [
+    {
+      "name": "spike:baseline",
+      "connections": 20,
+      "duration": 10,
+      "rps": 873,
+      "total": 9600,
+      "p50": 22,
+      "p90": 40,
+      "p99": 60,
+      "max": 83,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 9600,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "spike:surge",
+      "connections": 1500,
+      "duration": 15,
+      "rps": 700,
+      "total": 10500,
+      "p50": 2242,
+      "p90": 2632,
+      "p99": 2764,
+      "max": 2822,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 10500,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "spike:recovery",
+      "connections": 20,
+      "duration": 10,
+      "rps": 811,
+      "total": 8917,
+      "p50": 23,
+      "p90": 42,
+      "p99": 61,
+      "max": 468,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 8917,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    }
+  ]
+}

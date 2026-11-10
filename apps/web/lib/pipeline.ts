@@ -76,6 +76,8 @@ export async function runAnalysis(sessionId: string) {
   const session = await one(`select * from verification_sessions where id=$1`, [sessionId]);
   if (!session) return;
   const run = session.analysis_count + 1;
+  const stage = (progress: number, label: string) => q(`update verification_sessions set progress=$2, stage=$3 where id=$1`, [sessionId, progress, label]).then(() => undefined);
+  const degraded: string[] = []; // services that were unavailable → partial report
   const t0 = Date.now();
   await q(`update verification_sessions set status='processing', error=null, updated_at=now() where id=$1`, [sessionId]);
   const { ent } = await entitlementsFor(session.user_id);
@@ -98,6 +100,7 @@ export async function runAnalysis(sessionId: string) {
     await q(`update submitted_images set quality=$2 where id=$1`, [img.id, JSON.stringify(img.quality)]);
   }
 
+  await stage(15, "Inspecting the holder");
   // ---- 1. Holder inspection (cached by input hashes so retakes rerun only what changed)
   const label = byRole("label_closeup")[0];
   // Tilt evidence: photo frames + frames extracted from the latest tilt video; near-duplicates removed
@@ -126,6 +129,7 @@ export async function runAnalysis(sessionId: string) {
   }
   if (session.locked_cert && cert !== session.locked_cert) throw Object.assign(new Error("This session is bound to a different slab. Start a new session for another card."), { userFacing: true, noRetry: true });
 
+  await stage(35, "Checking the official record");
   // ---- 3. Official record
   let lookup: LookupResult | null = null;
   if (grader && cert) {
@@ -134,6 +138,7 @@ export async function runAnalysis(sessionId: string) {
     if (grader === "PSA" && env.psaToken) await recordCost(sessionId, session.user_id, "psa_api_call", 1);
   }
 
+  await stage(45, "Fetching reference images");
   // ---- 4. Reference images: official (if retrieved) else user-supplied
   const refs: Record<"front" | "back", { img: any; source: "official_api" | "user_supplied_reference" } | null> = { front: null, back: null };
   for (const side of ["front", "back"] as const) {
@@ -146,6 +151,7 @@ export async function runAnalysis(sessionId: string) {
     }
   }
 
+  await stage(55, "Comparing with the reference");
   // ---- 5. Reference comparison (cached per image pair)
   const comparisons: EngineInput["comparisons"] = [];
   for (const side of ["front", "back"] as const) {
@@ -178,6 +184,7 @@ export async function runAnalysis(sessionId: string) {
     ? { videoId: video.id, durationSec: video.quality.metrics.durationSec, sampled: video.quality.metrics.sampled, distinctFrames: video.quality.metrics.distinctFrames, status: video.quality.ok ? "ok" : "too_few_distinct_frames" }
     : undefined;
 
+  await stage(75, "Running security and integrity checks");
   // ---- 5c. Phase C checks: image integrity, verified templates (label/UV/microprint), proportions,
   //          cert sightings and market value. Each is cached per input image hash.
   const cachedEvidence = async <T,>(kind: string, key: string, compute: () => Promise<T>): Promise<T> => {
@@ -210,13 +217,16 @@ export async function runAnalysis(sessionId: string) {
   const certSightings = grader && cert
     ? await recordAndCheck({ sessionId, userId: session.user_id, grader, cert, category: category.id, phash: lt.itemHash?.phash ?? null, dhash: lt.itemHash?.dhash ?? null })
     : undefined;
-  const marketValue = hasFeature(ent, "market_value") ? await marketValueFor({ ...session, grader }, lookup?.record ?? null).catch(() => null) : null;
+  const marketValue = hasFeature(ent, "market_value") ? await marketValueFor({ ...session, grader }, lookup?.record ?? null).catch(() => { degraded.push("Market value (price service unavailable)"); return null; }) : null;
+  if (lookup?.providerError)
+    degraded.push(lookup.providerError === "quota_exhausted" ? "Official record (daily lookup limit reached — try again tomorrow or check the official link)" : "Official record (grader lookup temporarily unavailable)");
 
+  await stage(85, "Searching for reused photos");
   // ---- 6. Reverse image search (entitlement + configuration gated)
   let reverseImage: EngineInput["reverseImage"] = { status: hasFeature(ent, "reverse_image") ? "not_configured" : "not_entitled", samePhotoUrls: [], similarUrls: [] };
   if (hasFeature(ent, "reverse_image") && env.googleVisionKey) {
     const prev = await one(`select data from verification_evidence where session_id=$1 and kind='reverse_image' and data->>'sha'=$2 limit 1`, [sessionId, front.sha256]);
-    const wd = prev?.data ?? { ...(await webDetection(await load(front)).catch(() => null)), sha: front.sha256 };
+    const wd = prev?.data ?? { ...(await webDetection(await load(front)).catch(() => { degraded.push("Reverse image search (temporarily unavailable)"); return null; })), sha: front.sha256 };
     if (wd?.samePhotoUrls) {
       reverseImage = { status: "done", samePhotoUrls: wd.samePhotoUrls, similarUrls: wd.similarUrls };
       if (!prev) {
@@ -226,6 +236,7 @@ export async function runAnalysis(sessionId: string) {
     }
   }
 
+  await stage(92, "Writing your report");
   // ---- 7. Rules engine + report
   const input: EngineInput = {
     library: lib, category: category.id,
@@ -243,6 +254,11 @@ export async function runAnalysis(sessionId: string) {
     [sessionId, run, JSON.stringify({ ...snapshot, libraryVersion: lib.meta.version }), JSON.stringify({ source: "computed", tool: out.rulesVersion, retrievedAt: new Date().toISOString() })]);
   const report = buildReport(sessionId, input, out);
   (report as any).releaseVersion = await reportReleaseVersion();
+  if (degraded.length) {
+    // Graceful degradation: deliver what we could and say exactly what's missing.
+    (report as any).degraded = degraded;
+    report.quickSummary.cantSee = [...degraded, ...report.quickSummary.cantSee].slice(0, 6);
+  }
   (report as any).market = marketValue; // snapshot at analysis time (live value is recomputed on view)
   (report as any).reverseImageStatus = reverseImage.status;
   (report as any).planAtGeneration = ent.planId;
@@ -251,7 +267,7 @@ export async function runAnalysis(sessionId: string) {
   for (const f of out.findings) await q(`insert into risk_findings (session_id,analysis_run,severity,pattern,data) values ($1,$2,$3,$4,$5)`, [sessionId, run, f.severity, f.pattern, JSON.stringify(f)]);
   const title = (lookup?.record as OfficialCertRecord | undefined)?.description || (grader && cert ? `${grader} ${cert}` : "Untitled slab");
   await q(
-    `update verification_sessions set status='completed', analysis_count=$2, overall_assessment=$3, grader=coalesce(grader,$4), cert_number=coalesce(cert_number,$5), cert_source=coalesce(cert_source,$6),
+    `update verification_sessions set status='completed', progress=100, stage=null, analysis_count=$2, overall_assessment=$3, grader=coalesce(grader,$4), cert_number=coalesce(cert_number,$5), cert_source=coalesce(cert_source,$6),
        locked_cert=coalesce(locked_cert,$5), title=$7, completed_at=now(), updated_at=now() where id=$1`,
     [sessionId, run, out.assessment, grader, cert, certSource, title],
   );

@@ -11,6 +11,11 @@ from .codes import decode_codes
 from .geometry import parse_geometry
 from .imaging import decode, limit
 
+# Match OpenCV's thread pool to the container CPU limit (it otherwise sizes to the node's cores and is
+# throttled under a k8s CPU limit). VISION_THREADS=0/unset keeps OpenCV's default.
+if int(os.environ.get("VISION_THREADS", "0") or 0) > 0:
+    cv2.setNumThreads(int(os.environ["VISION_THREADS"]))
+
 def jsonable(v):
     """NumPy scalars/arrays → plain Python so FastAPI can serialize every analysis result."""
     import numpy as np

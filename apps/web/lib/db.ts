@@ -8,7 +8,15 @@ pg.types.setTypeParser(1700, (v) => Number(v));
 pg.types.setTypeParser(20, (v) => Number(v));
 
 const g = globalThis as unknown as { __pool?: pg.Pool };
-export const pool: pg.Pool = g.__pool ?? (g.__pool = new pg.Pool({ connectionString: env.databaseUrl, max: 10 }));
+/** Size per process; in production put PgBouncer / Supabase's pooler (transaction mode) in front.
+ * Advisory locks used for credits are transaction-scoped, so transaction pooling is safe. */
+export const pool: pg.Pool = g.__pool ?? (g.__pool = new pg.Pool({
+  connectionString: env.databaseUrl,
+  max: Number(process.env.DB_POOL_MAX ?? 10),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS ?? 15_000),
+}));
 
 export type Q = Pick<pg.PoolClient, "query">;
 

@@ -1,0 +1,103 @@
+# Reference Kubernetes deployment. Secrets come from a secret manager (e.g. External Secrets → `slabguard-secrets`).
+# Sizing targets ≥10k concurrent users; see docs/SCALING.md for the capacity model and load-test results.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: web, labels: { app: web } }
+spec:
+  replicas: 4
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata: { labels: { app: web } }
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/OWNER/slabguard-web:TAG
+          ports: [{ containerPort: 3000 }]
+          envFrom: [{ secretRef: { name: slabguard-secrets } }, { configMapRef: { name: slabguard-config } }]
+          env: [{ name: INLINE_WORKER, value: "0" }, { name: DB_POOL_MAX, value: "10" }]
+          resources: { requests: { cpu: "500m", memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
+          readinessProbe: { httpGet: { path: /api/ready, port: 3000 }, periodSeconds: 10, failureThreshold: 3 }
+          livenessProbe: { httpGet: { path: /api/health, port: 3000 }, periodSeconds: 15, failureThreshold: 4 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: web }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: web }
+  minReplicas: 4
+  maxReplicas: 60
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } } }]
+  behavior: { scaleUp: { stabilizationWindowSeconds: 0, policies: [{ type: Percent, value: 100, periodSeconds: 30 }] } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: web }
+spec: { minAvailable: 2, selector: { matchLabels: { app: web } } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: worker, labels: { app: worker } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: worker } }
+  template:
+    metadata: { labels: { app: worker } }
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/OWNER/slabguard-web:TAG
+          command: ["node_modules/.bin/tsx", "apps/web/scripts/worker.ts"]
+          envFrom: [{ secretRef: { name: slabguard-secrets } }, { configMapRef: { name: slabguard-config } }]
+          resources: { requests: { cpu: "250m", memory: 384Mi }, limits: { cpu: "500m", memory: 768Mi } }
+---
+# Workers scale on queue depth (KEDA PostgreSQL scaler): one worker per ~4 queued analyses.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: worker }
+spec:
+  scaleTargetRef: { name: worker }
+  minReplicaCount: 2
+  maxReplicaCount: 80
+  triggers:
+    - type: postgresql
+      metadata:
+        connectionFromEnv: DATABASE_URL
+        query: "select count(*) from jobs where status in ('queued','running')"
+        targetQueryValue: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: vision, labels: { app: vision } }
+spec:
+  replicas: 4
+  selector: { matchLabels: { app: vision } }
+  template:
+    metadata: { labels: { app: vision } }
+    spec:
+      containers:
+        - name: vision
+          image: ghcr.io/OWNER/slabguard-vision:TAG
+          ports: [{ containerPort: 8001 }]
+          # VISION_THREADS matches OpenCV's pool to the CPU limit (benchmark: ~9 vCPU-s per analysis).
+          env: [{ name: VISION_API_KEY, valueFrom: { secretKeyRef: { name: slabguard-secrets, key: VISION_API_KEY } } }, { name: VISION_THREADS, value: "2" }]
+          resources: { requests: { cpu: "2", memory: 1Gi }, limits: { cpu: "2", memory: 2Gi } }
+          readinessProbe: { httpGet: { path: /health, port: 8001 }, periodSeconds: 10 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: vision }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: vision }
+  minReplicas: 4
+  maxReplicas: 120
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: vision }
+spec: { selector: { app: vision }, ports: [{ port: 8001, targetPort: 8001 }] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: web }
+spec: { selector: { app: web }, ports: [{ port: 80, targetPort: 3000 }] }

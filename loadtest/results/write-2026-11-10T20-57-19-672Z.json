@@ -1,0 +1,30 @@
+{
+  "base": "http://localhost:3100",
+  "users": 2000,
+  "at": "2026-11-10T20:57:19.673Z",
+  "node": "v22.23.4",
+  "results": [
+    {
+      "name": "write+browse",
+      "connections": 200,
+      "duration": 20,
+      "rps": 661,
+      "total": 13226,
+      "p50": 352,
+      "p90": 481,
+      "p99": 645,
+      "max": 855,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 13226,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    }
+  ]
+}

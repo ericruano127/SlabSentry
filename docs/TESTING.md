@@ -16,6 +16,11 @@
 
 Synthetic fixtures (`services/vision/tests/synth.py`) generate cards sharing artwork but differing in cut and surface marks — they validate logic, **not real-world accuracy**.
 
+## Load, stress & capacity
+Reduced-scale autocannon runs and the analysis-throughput benchmark: `loadtest/local/` (results in `loadtest/results/`).
+Full 10,000-user k6 suites for staging: `loadtest/k6/`. Results, breaking point and capacity model: `docs/SCALING.md`.
+Re-run after every major patch.
+
 ## Accuracy evaluation plan (real data)
 Dataset (authorized images only, independently labeled by at least two reviewers; disagreements adjudicated; AI output never used as ground truth):
 genuine matched slabs · genuine with poor photos · same design/different copy · reused cert numbers · simulated wrong labels · different legitimate holder generations · official images with perspective/lighting differences · reholders · missing records · suspicious seams · photo replays and listing reuse.

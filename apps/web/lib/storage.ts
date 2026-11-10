@@ -7,6 +7,8 @@ import { env } from "./env";
 interface Store {
   put(key: string, data: Buffer, mime: string, opts?: { overwrite?: boolean }): Promise<void>;
   remove(key: string): Promise<void>;
+  /** Short-lived signed URL (CDN-cacheable) when the backend supports it; null → stream through the API. */
+  signedUrl(key: string, ttlSec: number): Promise<string | null>;
   get(key: string): Promise<Buffer>;
   removePrefix(prefix: string): Promise<void>;
 }
@@ -19,6 +21,7 @@ const local: Store = {
   },
   get: (key) => readFile(safe(key)),
   remove: (key) => rm(safe(key), { force: true }),
+  signedUrl: async () => null,
   removePrefix: (prefix) => rm(safe(prefix), { recursive: true, force: true }),
 };
 
@@ -37,6 +40,10 @@ const supa: Store = {
   async remove(key) {
     const { error } = await client().storage.from(env.storageBucket).remove([key]);
     if (error) throw error;
+  },
+  async signedUrl(key, ttlSec) {
+    const { data, error } = await client().storage.from(env.storageBucket).createSignedUrl(key, ttlSec);
+    return error ? null : data.signedUrl;
   },
   async get(key) {
     const { data, error } = await client().storage.from(env.storageBucket).download(key);

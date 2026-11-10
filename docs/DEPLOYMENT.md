@@ -32,6 +32,19 @@ createdb slabguard_test && pnpm --filter @slabguard/web test   # TEST_DATABASE_U
 
 AUTH_MODE=dev is ignored when `NODE_ENV=production`.
 
+### Containers & Kubernetes (Phase F)
+- `Dockerfile.web`: one image for both web (`node apps/web/server.js`) and worker (`pnpm worker`). `docker compose up` runs the full stack; `docker compose --profile tools run migrate` applies migrations.
+- `deploy/k8s/slabguard.yaml`:
+  - web: HPA + PodDisruptionBudget, probes on `/api/health` and `/api/ready`;
+  - workers: autoscaled by KEDA on queue depth;
+  - vision: HPA, with `VISION_THREADS` matched to the CPU limit.
+
+  Replace `OWNER/TAG`, and create the `slabguard-secrets` secret from your secrets manager (never commit it).
+- Put PgBouncer (transaction mode) in front of Postgres; keep `DB_POOL_MAX × processes` below its limit.
+- Set `REDIS_URL` so rate limits and the PSA quota are shared across instances.
+- Prometheus scrapes `/api/metrics` with `METRICS_TOKEN`. Load the alert rules in `deploy/monitoring/alerts.yml`, and set `ALERT_WEBHOOK_URL` for error notifications.
+- Capacity sizing: `docs/SCALING.md`.
+
 ### Stripe (web)
 1. Create products/prices matching `config/plans.json` price ids; set `STRIPE_PRICE_PRO_MONTH` etc. (or edit in Admin → Plans) and re-run migrate with `PLANS_FORCE_SYNC=1` on first setup.
 2. Customer Portal: allow plan switching between these prices (upgrades prorated immediately; schedule downgrades at period end) and cancellation at period end.

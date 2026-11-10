@@ -1,0 +1,34 @@
+# Web/API + worker image (same image; the worker runs `node apps/web/worker.mjs`-equivalent via tsx).
+FROM node:22-slim AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/web/package.json apps/web/
+COPY packages/core/package.json packages/core/
+RUN pnpm install --frozen-lockfile --filter @slabguard/web...
+
+FROM deps AS build
+COPY . .
+RUN pnpm --filter @slabguard/web build
+
+FROM node:22-slim AS runtime
+ENV NODE_ENV=production PORT=3000
+WORKDIR /app
+RUN groupadd -r app && useradd -r -g app app
+# standalone server + static assets (serve /_next/static via CDN in front of this)
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+# worker + migrations need sources and dev tooling (tsx)
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/apps/web/node_modules ./apps/web/node_modules
+COPY --from=build /repo/apps/web/lib ./apps/web/lib
+COPY --from=build /repo/apps/web/scripts ./apps/web/scripts
+COPY --from=build /repo/apps/web/db ./apps/web/db
+COPY --from=build /repo/apps/web/package.json ./apps/web/package.json
+COPY --from=build /repo/packages ./packages
+COPY --from=build /repo/config ./config
+COPY --from=build /repo/legal ./legal
+USER app
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=3s CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "apps/web/server.js"]

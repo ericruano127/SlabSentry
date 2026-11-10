@@ -1,0 +1,39 @@
+# Prometheus alert rules for the metrics exposed at /api/metrics (scrape with METRICS_TOKEN).
+groups:
+  - name: slabguard
+    rules:
+      - alert: AnalysisQueueBacklog
+        expr: slabguard_queue_oldest_seconds > 180
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "Oldest queued analysis waiting > 3 min — workers/vision not keeping up" }
+      - alert: AnalysisSlow
+        expr: slabguard_analysis_seconds{quantile="0.95"} > 60
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "p95 analysis time > 60 s" }
+      - alert: AnalysisFailures
+        expr: slabguard_sessions_last_hour{status="failed"} / clamp_min(slabguard_sessions_last_hour{status="completed"} + slabguard_sessions_last_hour{status="failed"}, 1) > 0.05
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: "> 5% of analyses failing (credits are released, but users are blocked)" }
+      - alert: ApiErrorRate
+        expr: sum(rate(slabguard_http_requests_total{class="5xx"}[5m])) / sum(rate(slabguard_http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "API 5xx rate > 2%" }
+      - alert: ApiLatency
+        expr: histogram_quantile(0.95, sum(rate(slabguard_http_request_seconds_bucket[5m])) by (le)) > 1
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "API p95 latency > 1 s" }
+      - alert: BillingWebhookFailures
+        expr: slabguard_billing_webhook_failures_last_hour > 0
+        for: 15m
+        labels: { severity: page }
+        annotations: { summary: "Billing webhooks failing — subscriptions may be out of sync" }
+      - alert: RateLimitSpike
+        expr: rate(slabguard_rate_limited_total[5m]) > 20
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "Unusual volume of rate-limited requests (abuse or a client bug)" }

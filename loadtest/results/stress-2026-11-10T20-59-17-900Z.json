@@ -1,0 +1,118 @@
+{
+  "base": "http://localhost:3100",
+  "users": 2000,
+  "at": "2026-11-10T20:59:17.900Z",
+  "node": "v22.23.4",
+  "results": [
+    {
+      "name": "stress",
+      "connections": 100,
+      "duration": 15,
+      "rps": 850,
+      "total": 12755,
+      "p50": 127,
+      "p90": 198,
+      "p99": 290,
+      "max": 371,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 12755,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 250,
+      "duration": 15,
+      "rps": 899,
+      "total": 13490,
+      "p50": 298,
+      "p90": 419,
+      "p99": 601,
+      "max": 828,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 13490,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 500,
+      "duration": 15,
+      "rps": 650,
+      "total": 9755,
+      "p50": 830,
+      "p90": 1441,
+      "p99": 1794,
+      "max": 2317,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 9755,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 1000,
+      "duration": 15,
+      "rps": 593,
+      "total": 8902,
+      "p50": 2096,
+      "p90": 2489,
+      "p99": 4232,
+      "max": 4550,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 8902,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 2000,
+      "duration": 15,
+      "rps": 607,
+      "total": 9106,
+      "p50": 2996,
+      "p90": 5988,
+      "p99": 9659,
+      "max": 9999,
+      "non2xx": 0,
+      "errors": 20,
+      "timeouts": 20,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 9106,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0.44
+    }
+  ]
+}

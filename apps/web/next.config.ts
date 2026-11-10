@@ -1,6 +1,10 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  // Self-contained server bundle for containers (monorepo root so workspace packages are traced).
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: ["@slabguard/core"],
   serverExternalPackages: ["pg"],
   poweredByHeader: false,

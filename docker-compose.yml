@@ -1,0 +1,42 @@
+# Full local stack: docker compose up --build   (then: docker compose run --rm migrate)
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_HOST_AUTH_METHOD: trust, POSTGRES_DB: slabguard }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD", "pg_isready"], interval: 5s, retries: 10 }
+  redis:
+    image: redis:7
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 10 }
+  vision:
+    build: ./services/vision
+    environment: { VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}" }
+    deploy: { resources: { limits: { cpus: "2" } } }
+  migrate:
+    build: { context: ., dockerfile: Dockerfile.web }
+    command: ["node_modules/.bin/tsx", "apps/web/scripts/migrate.ts"]
+    working_dir: /app/apps/web
+    environment: &webenv
+      DATABASE_URL: postgres://postgres@postgres:5432/slabguard
+      REDIS_URL: redis://redis:6379
+      VISION_URL: http://vision:8001
+      VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}"
+      CERT_HASH_SECRET: "${CERT_HASH_SECRET:-change-me-local-only-0123456789abcdef}"
+      ALLOW_UNREVIEWED_LEGAL: "1"
+      NEXT_PUBLIC_SUPABASE_URL: "${NEXT_PUBLIC_SUPABASE_URL:-}"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
+    depends_on: { postgres: { condition: service_healthy } }
+    profiles: [tools]
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    environment: { <<: *webenv, INLINE_WORKER: "0" }
+    ports: ["3000:3000"]
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, vision: { condition: service_started } }
+  worker:
+    build: { context: ., dockerfile: Dockerfile.web }
+    command: ["node_modules/.bin/tsx", "apps/web/scripts/worker.ts"]
+    environment: *webenv
+    depends_on: { postgres: { condition: service_healthy }, vision: { condition: service_started } }
+    deploy: { replicas: 2 }
+volumes: { pgdata: {} }

@@ -1,5 +1,6 @@
 import { officialLookupUrl, type CompiledLibrary, type GraderId, type OfficialCertRecord } from "@slabguard/core";
 import { env } from "../env";
+import { consumeQuota } from "../ratelimit";
 
 /**
  * Grader adapters. Only documented, permitted integrations are called; every
@@ -33,9 +34,18 @@ async function psaGet(path: string) {
   return t ? JSON.parse(t) : null;
 }
 
+/** PSA's free tier allows 100 calls/day per account: enforce globally across all app instances,
+ * plus a per-second throttle so bursts don't trip PSA's limits. Two calls per lookup (record + images). */
+export const PSA_DAILY_LIMIT = Number(process.env.PSA_DAILY_LIMIT ?? 100);
+export const PSA_PER_SECOND = Number(process.env.PSA_PER_SECOND ?? 2);
+
 async function psaLookup(cert: string, link: string | null): Promise<LookupResult> {
   const now = new Date().toISOString();
   const prov = { source: "official_api" as const, url: `${PSA}/cert/GetByCertNumber/${cert}`, retrievedAt: now, tool: "psa-public-api" };
+  const daily = await consumeQuota("psa:daily", Math.floor(PSA_DAILY_LIMIT / 2), 86_400);
+  const burst = await consumeQuota("psa:second", PSA_PER_SECOND, 1);
+  if (!daily.ok || !burst.ok)
+    return { record: { grader: "PSA", certNumber: cert, found: null, verificationUrl: link, provenance: { ...prov, note: !daily.ok ? "PSA daily lookup limit reached" : "PSA lookups busy" } }, images: [], imageAvailability: "inaccessible", providerError: !daily.ok ? "quota_exhausted" : "throttled" };
   try {
     const data = await psaGet(`/cert/GetByCertNumber/${encodeURIComponent(cert)}`);
     const c = data?.PSACert;

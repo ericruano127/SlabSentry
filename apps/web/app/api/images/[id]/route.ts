@@ -9,5 +9,8 @@ export const GET = handle(async (req: Request, ctx: { params: Promise<{ id: stri
   const img = await one(`select storage_key, mime, purged_at from submitted_images where id=$1 and user_id=$2`, [(await ctx.params).id, u.id]);
   if (!img) throw new HttpError(404, "not_found", "Image not found");
   if (img.purged_at || !img.storage_key) throw new HttpError(410, "purged", "This photo was deleted under our retention policy. The report remains available.");
+  // Production: redirect to a 5-minute signed storage/CDN URL so image bytes never pass through the app.
+  const signed = await storage.signedUrl(img.storage_key, 300);
+  if (signed) return new Response(null, { status: 302, headers: { Location: signed, "Cache-Control": "private, max-age=240" } });
   return new Response(new Uint8Array(await storage.get(img.storage_key)), { headers: { "Content-Type": img.mime, "Cache-Control": "private, max-age=3600" } });
 });
