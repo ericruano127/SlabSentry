@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   "audit:read": ["admin", "owner"],
   "library:read": ["analyst", "admin", "owner"],
   "library:write": ["admin", "owner"],
+  "library:submit": ["analyst", "admin", "owner"], // submit verified templates for review
+  "library:review": ["admin", "owner"], // approve/reject/retire templates (never one's own submission)
   "privacy:read": ["support", "admin", "owner"],
   "quality:read": ["analyst", "admin", "owner"],
   "quality:label": ["analyst", "admin", "owner"],

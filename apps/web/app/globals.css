@@ -90,3 +90,4 @@ label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; 
 .overlay-wrap img { width: 100%; border-radius: 10px; display: block; }
 .region { position: absolute; border: 2px solid var(--bad); border-radius: 4px; box-shadow: 0 0 0 9999px transparent; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.btn.small { min-height: 36px; padding: 4px 12px; font-size: .85rem; }

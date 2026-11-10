@@ -28,6 +28,8 @@ export const env = {
   maxAnalysesPerSession: Number(process.env.MAX_ANALYSES_PER_SESSION ?? 8),
   maxImagesPerSession: Number(process.env.MAX_IMAGES_PER_SESSION ?? 30),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 15 * 1024 * 1024),
+  /** Single-operator deployments only: lets an owner approve their own template submissions (recorded as self-approved). */
+  templateSelfApproval: process.env.TEMPLATE_SELF_APPROVAL === "1",
   maxVideoBytes: Number(process.env.MAX_VIDEO_BYTES ?? 60 * 1024 * 1024),
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
   aiNarrativeEnabled: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),

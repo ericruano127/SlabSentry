@@ -12,7 +12,7 @@ import { webDetection } from "./reverse-image";
 import { distinctImages, resolveEra } from "@slabguard/core";
 import { recordAndCheck } from "./cert-sightings";
 import { marketValueFor } from "./market";
-import { activeTemplate } from "./templates";
+import { activeTemplates, matchRank, type TemplateKind } from "./templates";
 import { activeImages, storeVideoFrames } from "./sessions";
 import { loadLibrary } from "./library";
 import { reportReleaseVersion } from "./releases";
@@ -205,14 +205,27 @@ export async function runAnalysis(sessionId: string) {
     observed: { codes: holder.codes, ocrText: holder.ocrText, tiltChange: holder.tilt?.status === "consistent", backlitChange: holder.backlit?.status === "consistent" },
   }) : null;
   const genId = eraForTemplates?.generation?.id ?? null;
-  const [labelTpl, uvTpl, mpTpl] = await Promise.all([activeTemplate(genId, "label"), activeTemplate(genId, "uv"), activeTemplate(genId, "microprint")]);
-  const lt: any = await cachedEvidence("label_template", `${front.sha256}|${genId}|${!!labelTpl}`, async () => vision.labelTemplate(await load(front), labelTpl, geometry));
+  const [labelTpls, uvTpls, mpTpls] = await Promise.all([activeTemplates(genId, "label"), activeTemplates(genId, "uv"), activeTemplates(genId, "microprint")]);
+  // Compare with every approved variant of this generation's template and keep the best match (label
+  // variants exist, e.g. regular vs. special labels). Cache keys carry the template id, so approving
+  // or retiring a template re-runs the comparison.
+  const bestMatch = async (kind: TemplateKind, cacheKind: string, img: any, tpls: { id: string; variant: string | null; data: Buffer }[],
+    run: (bytes: Buffer, tpl: Buffer | null) => Promise<any>) => {
+    if (!tpls.length) return cachedEvidence(cacheKind, `${img.sha256}|${genId}|none`, async () => run(await load(img), null));
+    let best: any = null;
+    for (const t of tpls) {
+      const r: any = await cachedEvidence(cacheKind, `${img.sha256}|${genId}|${t.id}`, async () => ({ ...(await run(await load(img), t.data)), templateId: t.id, templateVariant: t.variant }));
+      if (!best || matchRank(kind, r) > matchRank(kind, best)) best = r;
+    }
+    return best;
+  };
+  const lt: any = await bestMatch("label", "label_template", front, labelTpls, (b, t) => vision.labelTemplate(b, t, geometry));
   const uvImg = byRole("uv")[0];
   const closeup = byRole("security_closeup")[0];
   const templates: EngineInput["templates"] = {
-    labelTemplateAvailable: !!labelTpl, label: lt.label ?? null, proportions: lt.proportions ?? null,
-    uv: uvImg ? await cachedEvidence("uv", `${uvImg.sha256}|${genId}|${!!uvTpl}`, async () => vision.uv(await load(uvImg), uvTpl)) : null,
-    microprint: closeup ? await cachedEvidence("microprint", `${closeup.sha256}|${genId}|${!!mpTpl}`, async () => vision.microprint(await load(closeup), mpTpl)) : null,
+    labelTemplateAvailable: labelTpls.length > 0, label: lt.label ?? null, proportions: lt.proportions ?? null,
+    uv: uvImg ? await bestMatch("uv", "uv", uvImg, uvTpls, (b, t) => vision.uv(b, t)) : null,
+    microprint: closeup ? await bestMatch("microprint", "microprint", closeup, mpTpls, (b, t) => vision.microprint(b, t)) : null,
   };
   const certSightings = grader && cert
     ? await recordAndCheck({ sessionId, userId: session.user_id, grader, cert, category: category.id, phash: lt.itemHash?.phash ?? null, dhash: lt.itemHash?.dhash ?? null })

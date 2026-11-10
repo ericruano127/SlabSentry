@@ -10,6 +10,7 @@ import { POST as noncePOST } from "../app/api/sessions/[id]/capture-nonce/route"
 import { POST as compsPOST } from "../app/api/sessions/[id]/comps/route";
 import { GET as marketGET } from "../app/api/sessions/[id]/market/route";
 import { POST as templatesPOST } from "../app/api/admin/templates/route";
+import { POST as reviewPOST } from "../app/api/admin/templates/[id]/review/route";
 import { withMetadata } from "./exif-fixture";
 import { newSession, newUser, req, resetDb } from "./helpers";
 
@@ -81,6 +82,10 @@ describe.skipIf(!run)("phase C pipeline (live vision service)", () => {
     expect(denied.status).toBe(403); // no 2FA
     const ok = await templatesPOST(req("/api/admin/templates", staff, { method: "POST", aal2: true, json: { imageId: srcImg.id, generationId: "tag_current", kind: "label", note: "Slab confirmed genuine by the grader (test)" } }));
     expect(ok.status).toBe(201);
+    const reviewer = await newUser(); // two-person rule: a second admin approves
+    await q(`update app_users set role='admin' where id=$1`, [reviewer]);
+    const tpl = await ok.json();
+    expect((await reviewPOST(req(`/api/admin/templates/${tpl.id}/review`, reviewer, { method: "POST", aal2: true, json: { decision: "approve", note: "checked" } }), ctx(tpl.id))).status).toBe(200);
 
     const u = await newUser();
     const same = await session(u, { grader: "TAG", cert: "T1000002" });

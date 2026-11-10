@@ -1,3 +1,4 @@
+import { templateFingerprint } from "./templates";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { compareAccuracy, lintPublicNotes, RULES_VERSION } from "@slabguard/core";
@@ -24,7 +25,8 @@ export async function currentComponents() {
   let app = "unknown";
   try { app = JSON.parse(readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")).version; } catch { /* ignore */ }
   const models = await q(`select name, version from model_registry where status='active' order by name`);
-  return { rules: RULES_VERSION, library: { version: lib.meta.version, sha256: lib.meta.sha256 }, vision, app, models };
+  // Approved templates change analysis results, so their set is part of the release record.
+  return { rules: RULES_VERSION, library: { version: lib.meta.version, sha256: lib.meta.sha256 }, vision, app, models, templates: await templateFingerprint() };
 }
 
 export async function latestPublished() {
