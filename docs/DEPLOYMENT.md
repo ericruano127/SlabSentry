@@ -13,7 +13,7 @@ pnpm db:migrate                             # applies SQL migrations, seeds plan
 pnpm dev:vision                             # :8001
 pnpm dev:web                                # :3000 (inline job worker in dev)
 ```
-Mobile: `cd apps/mobile && EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000 EXPO_PUBLIC_SUPABASE_URL=... EXPO_PUBLIC_SUPABASE_ANON_KEY=... npx expo start` (development build required for RevenueCat / Apple sign-in: `npx expo run:ios|android` or EAS).
+Mobile: `cd apps/mobile && EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000 EXPO_PUBLIC_SUPABASE_URL=... EXPO_PUBLIC_SUPABASE_ANON_KEY=... npx expo start` (development build required for RevenueCat, Apple sign-in and the live camera — Expo Go is not supported: `npx expo prebuild && npx expo run:ios|android` or EAS; see `docs/MOBILE_CAMERA.md`).
 
 ## Tests
 ```bash

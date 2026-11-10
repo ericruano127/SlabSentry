@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { analyzeFrame, hintsFor, toFrame, type Frame, type Hint } from "@/lib/client/frame-analysis";
+import { analyzeFrame, CAPTURE_TIMING, hintsFor, toFrame, type CaptureTarget, type Frame, type Hint } from "@slabguard/core/capture";
 
 /**
  * Live camera with real-time framing guidance (runs on-device, nothing is uploaded until capture).
@@ -10,7 +10,7 @@ import { analyzeFrame, hintsFor, toFrame, type Frame, type Hint } from "@/lib/cl
  */
 const W = 240;
 
-export function LiveCamera({ mode, label, onCapture, onClose, target = "slab" }: { mode: "photo" | "video"; label: string; onCapture: (b: Blob, name: string) => void; onClose: () => void; target?: "slab" | "closeup" }) {
+export function LiveCamera({ mode, label, onCapture, onClose, target = "slab" }: { mode: "photo" | "video"; label: string; onCapture: (b: Blob, name: string) => void; onClose: () => void; target?: CaptureTarget }) {
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hints, setHints] = useState<Hint[]>([]);
@@ -46,12 +46,12 @@ export function LiveCamera({ mode, label, onCapture, onClose, target = "slab" }:
           const { hints: hs, ready: ok } = hintsFor(checks, target);
           if (v.videoWidth < 1600) hs.push({ key: "res", ok: true, text: `Camera ${v.videoWidth}px — fine details may be inconclusive` });
           steady.current = ok ? steady.current + 1 : 0;
-          setReady(steady.current >= 3);
+          setReady(steady.current >= CAPTURE_TIMING.readyAfter);
           setHints(hs);
           setBox(checks.box ? { ...checks.box, w: W, h } : null);
           // Auto-capture after ~1 s of passing checks (photo mode only, once).
-          if (mode === "photo" && autoRef.current && steady.current >= 4 && !captured.current) { captured.current = true; snap(); }
-        }, 250);
+          if (mode === "photo" && autoRef.current && steady.current >= CAPTURE_TIMING.autoAfter && !captured.current) { captured.current = true; snap(); }
+        }, CAPTURE_TIMING.intervalMs);
       })
       .catch(() => setErr("Camera unavailable. Allow camera access, or use “Upload photo” instead."));
     return () => {

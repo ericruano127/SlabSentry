@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeFrame, hintsFor, type Frame } from "../lib/client/frame-analysis";
+import { analyzeFrame, captureTargetFor, fromLuma, hintsFor, toFrame, type Frame } from "../src/capture/frame-analysis";
 
 const W = 240, H = 320;
 /** Synthetic frame: textured bright slab (optionally a trapezoid) on a dark background. */
@@ -49,5 +49,50 @@ describe("live capture frame checks", () => {
   it("too small in frame → move closer", () => {
     const c = analyzeFrame(frame({ x0: 100, x1: 150, y0: 120, y1: 200 }), null);
     expect(hintsFor(c, "slab").hints.find((x) => x.key === "size")?.text).toBe("Move closer");
+  });
+});
+
+describe("camera inputs (shared by web canvas and mobile frame processor)", () => {
+  /** Full-resolution luma plane with row padding, like a real camera buffer. */
+  function lumaPlane(scale: number, pad = 64) {
+    const f = frame();
+    const w = W * scale, h = H * scale, bpr = w + pad;
+    const y = new Uint8Array(bpr * h);
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) y[r * bpr + c] = f.gray[Math.floor(r / scale) * W + Math.floor(c / scale)];
+    return { y, w, h, bpr };
+  }
+
+  it("a 4× luma plane with row padding downsamples to the same verdict as the reference frame", () => {
+    const p = lumaPlane(4);
+    const f = fromLuma(p.y, p.w, p.h, p.bpr, W);
+    expect([f.w, f.h]).toEqual([W, H]);
+    const c = analyzeFrame(f, f);
+    expect(hintsFor(c, "slab").ready).toBe(true);
+    expect(c.edgesInside).toBe(true);
+  });
+
+  it("video-range luma (16–235) is expanded so light thresholds still apply", () => {
+    const y = new Uint8Array(100).fill(16);
+    expect(fromLuma(y, 10, 10, 10, 10, true).gray[0]).toBe(0);
+    expect(fromLuma(new Uint8Array(100).fill(235), 10, 10, 10, 10, true).gray[0]).toBe(255);
+  });
+
+  it("RGBA with a stride downsamples and counts glare", () => {
+    const w = 8, h = 4, stride = w * 4 + 16;
+    const px = new Uint8Array(stride * h).fill(255);
+    const f = toFrame(px, w, h, stride, 4);
+    expect([f.w, f.h]).toEqual([4, 2]);
+    expect(f.glareFrac).toBe(1);
+  });
+
+  it("blacklight/backlit shots skip the light and glare checks; slab shots don't", () => {
+    const dark = frame();
+    for (let i = 0; i < dark.gray.length; i++) dark.gray[i] *= 0.25; // UV-dark scene, still textured
+    const c = analyzeFrame(dark, dark);
+    expect(hintsFor(c, "closeup").hints.find((h) => h.key === "light")?.ok).toBe(false);
+    const low = hintsFor(c, "lowlight");
+    expect(low.hints.some((h) => h.key === "light" || h.key === "glare")).toBe(false);
+    expect(low.ready).toBe(true);
+    expect([captureTargetFor("front"), captureTargetFor("label_closeup"), captureTargetFor("uv"), captureTargetFor("backlit")]).toEqual(["slab", "closeup", "lowlight", "lowlight"]);
   });
 });

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useApi, type Me } from "@/lib/client/hooks";
+import { captureTargetFor } from "@slabguard/core/capture";
 import { LiveCamera } from "./LiveCamera";
 import { UpgradePrompt } from "./ui";
 
@@ -39,7 +40,7 @@ function Capture({ label, hint, role, multiple, onUpload, images, attestation, i
   const last = mine[mine.length - 1];
   return (
     <div className={`capture ${mine.length ? "has" : ""}`} style={highlight ? { borderColor: "var(--accent)", borderStyle: "solid" } : undefined}>
-      {live && <LiveCamera mode={isVideo ? "video" : "photo"} target={["front", "back"].includes(role) ? "slab" : "closeup"} label={label} onClose={() => setLive(false)} onCapture={async (b, name) => { setLive(false); setBusy(true); try { await onUpload(role, b, attestation, name); } finally { setBusy(false); } }} />}
+      {live && <LiveCamera mode={isVideo ? "video" : "photo"} target={captureTargetFor(role)} label={label} onClose={() => setLive(false)} onCapture={async (b, name) => { setLive(false); setBusy(true); try { await onUpload(role, b, attestation, name); } finally { setBusy(false); } }} />}
       <h3>{label}</h3>
       <p className="small muted">{hint}</p>
       <input ref={ref} type="file" accept={isVideo ? "video/mp4,video/quicktime,video/webm" : "image/jpeg,image/png,image/webp"} capture={inHand && !role.startsWith("reference") ? "environment" : undefined} multiple={multiple} hidden

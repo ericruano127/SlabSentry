@@ -2,7 +2,9 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Image, ScrollView, TextInput, View } from "react-native";
+import { captureTargetFor } from "@slabguard/core/capture";
 import { api, ApiError, uploadPhoto } from "../lib/api";
+import { LiveCamera, type LiveCaptureResult } from "../lib/LiveCamera";
 import { Button, Card, T, useTheme } from "../lib/ui";
 
 type Step = { role: string; title: string; hint: string; optional?: boolean; multiple?: boolean };
@@ -59,7 +61,37 @@ export default function Scan() {
     setMode(m);
   }
 
-  async function capture(step: Step, fromLibrary: boolean) {
+  // In-app captures use the guided live camera; the system camera remains as a fallback.
+  const [live, setLive] = useState<{ step: Step; nonce?: string } | null>(null);
+
+  async function openLive(step: Step) {
+    // Single-use code so the report can note a live in-app capture (library picks never get one).
+    const nonce = (await api(`/api/sessions/${sessionId}/capture-nonce`, { method: "POST" }).catch(() => null))?.nonce;
+    setLive({ step, nonce });
+  }
+
+  async function upload(step: Step, assets: { uri: string; mimeType?: string | null }[], attestation?: string, nonce?: string) {
+    setBusy(true);
+    try {
+      for (const a of assets) {
+        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation, a.mimeType ?? undefined, assets.length === 1 ? nonce : undefined);
+        setShots((s) => ({ ...s, [step.role]: [...(step.multiple ? s[step.role] ?? [] : []), { uri: a.uri, quality: r.image.quality }] }));
+      }
+    } catch (e: any) {
+      Alert.alert("Upload", e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onLiveCapture(r: LiveCaptureResult) {
+    const l = live;
+    setLive(null);
+    if (l) await upload(l.step, [r], undefined, l.nonce);
+  }
+
+  async function capture(step: Step, fromLibrary: boolean, systemCamera = false) {
+    if (!fromLibrary && !systemCamera) return openLive(step);
     const attestation = step.role.startsWith("reference") ? await askAttestation() : undefined;
     if (attestation === null) return;
     const isVideo = step.role === "tilt_video";
@@ -74,17 +106,7 @@ export default function Scan() {
     const nonce = !fromLibrary ? (await api(`/api/sessions/${sessionId}/capture-nonce`, { method: "POST" }).catch(() => null))?.nonce : undefined;
     const res = fromLibrary ? await ImagePicker.launchImageLibraryAsync(opts) : await ImagePicker.launchCameraAsync(opts);
     if (res.canceled) return;
-    setBusy(true);
-    try {
-      for (const a of res.assets) {
-        const r = await uploadPhoto(sessionId!, step.role, a.uri, attestation, a.mimeType ?? undefined, res.assets.length === 1 ? nonce : undefined);
-        setShots((s) => ({ ...s, [step.role]: [...(step.multiple ? s[step.role] ?? [] : []), { uri: a.uri, quality: r.image.quality }] }));
-      }
-    } catch (e: any) {
-      Alert.alert("Upload", e.message);
-    } finally {
-      setBusy(false);
-    }
+    await upload(step, res.assets, attestation, nonce);
   }
 
   async function readLabel() {
@@ -173,6 +195,15 @@ export default function Scan() {
         <Button title={step.role === "tilt_video" ? "Choose video" : mode === "in_hand" ? "Choose from library" : "Upload seller photo"} onPress={() => capture(step, true)} busy={busy} />
       </Card>
       <T muted size={13}>Never bend, open, heat or scrape a slab. Photos and retakes don't use credits.</T>
+      <LiveCamera
+        visible={!!live}
+        mode={live?.step.role === "tilt_video" ? "video" : "photo"}
+        target={captureTargetFor(live?.step.role ?? step.role)}
+        label={live?.step.title ?? step.title}
+        onCapture={onLiveCapture}
+        onClose={() => setLive(null)}
+        onFallback={() => { const st = live?.step; setLive(null); if (st) capture(st, false, true); }}
+      />
       <View style={{ flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1 }}><Button title="Back" onPress={() => setI(Math.max(0, i - 1))} disabled={i === 0} /></View>
         <View style={{ flex: 1 }}>
