@@ -7,7 +7,7 @@ const source = (req: Request) => (req.headers.get("x-client") === "mobile" ? "mo
 
 export const GET = handle(async (req: Request) => {
   const u = await requireUser(req, { skipConsent: true });
-  return json(await consentStatus(u.id));
+  return json(await consentStatus(u.id, u.row as any));
 });
 
 /** Accept the current Terms + Privacy (versions echoed back) and optionally choose training consent. */

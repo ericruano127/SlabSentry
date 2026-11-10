@@ -17,9 +17,9 @@ export async function ensureUser(id: string, email: string | null) {
   });
 }
 
-export async function isNewUser(id: string) {
-  const r = await one(`select created_at from app_users where id=$1`, [id]);
-  return r ? Date.now() - new Date(r.created_at).getTime() < 10 * 60_000 : false;
+/** Created in the last 10 minutes (pass the already-loaded app_users row). */
+export function isNewUser(row: { created_at?: string } | null | undefined) {
+  return row?.created_at ? Date.now() - new Date(row.created_at).getTime() < 10 * 60_000 : false;
 }
 
 export async function listUserSessions(userId: string, search?: string, limit = 50) {

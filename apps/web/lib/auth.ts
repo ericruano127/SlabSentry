@@ -12,6 +12,8 @@ export interface AuthUser {
   isAdmin: boolean; // role is admin or owner (UI convenience)
   role: Role;
   aal: "aal1" | "aal2"; // authenticator assurance level; aal2 = MFA verified this session
+  /** The app_users row loaded while authenticating (reused for consent and profile; not serialized). */
+  row?: Record<string, any>;
 }
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -74,6 +76,7 @@ export async function getUser(req: Request, opts: { optional?: boolean } = {}): 
   // ADMIN_EMAILS bootstraps the first owner; afterwards roles are managed in the database (audited).
   user.role = row.role !== "user" ? row.role : !!user.email && env.adminEmails.includes(user.email.toLowerCase()) ? "owner" : "user";
   user.isAdmin = user.role === "admin" || user.role === "owner";
+  Object.defineProperty(user, "row", { value: row, enumerable: false });
   return user;
 }
 
@@ -83,7 +86,7 @@ export async function getUser(req: Request, opts: { optional?: boolean } = {}): 
  */
 export async function requireUser(req: Request, opts: { skipConsent?: boolean } = {}) {
   const u = (await getUser(req))!;
-  if (!opts.skipConsent) await requireConsent(u.id);
+  if (!opts.skipConsent) await requireConsent(u.id, u.row as any);
   return u;
 }
 

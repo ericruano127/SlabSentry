@@ -1,3 +1,4 @@
+import { cachedValue } from "./cache";
 import { one, q, tx, lockUser } from "./db";
 import { HttpError } from "./http";
 
@@ -9,17 +10,14 @@ import { HttpError } from "./http";
 export type ConsentSource = "web" | "mobile" | "api" | "system";
 export interface LegalDoc { kind: string; version: string; title: string; body_md: string; requires_acceptance: boolean; legal_review_status: string; effective_at: string }
 
-let cache: { at: number; docs: LegalDoc[] } | null = null;
+const docsCache = cachedValue(30_000, () => q<LegalDoc>(
+  `select distinct on (kind) kind, version, title, body_md, requires_acceptance, legal_review_status, effective_at
+     from legal_documents where published and effective_at <= now() order by kind, effective_at desc`,
+), { staleWhileRevalidate: true });
 export async function currentDocs(): Promise<LegalDoc[]> {
-  if (cache && Date.now() - cache.at < 30_000) return cache.docs;
-  const docs = await q<LegalDoc>(
-    `select distinct on (kind) kind, version, title, body_md, requires_acceptance, legal_review_status, effective_at
-       from legal_documents where published and effective_at <= now() order by kind, effective_at desc`,
-  );
-  cache = { at: Date.now(), docs };
-  return docs;
+  return docsCache.get();
 }
-export function invalidateLegalCache() { cache = null; }
+export function invalidateLegalCache() { docsCache.invalidate(); }
 
 export interface ConsentStatus {
   required: boolean;
@@ -29,9 +27,10 @@ export interface ConsentStatus {
   pendingLegalReview: boolean;
 }
 
-export async function consentStatus(userId: string): Promise<ConsentStatus> {
+/** Pass `row` (the app_users row already loaded for this request) to skip re-reading it. */
+export async function consentStatus(userId: string, row?: ConsentRow | null): Promise<ConsentStatus> {
   const docs = await currentDocs();
-  const u = await one(`select terms_version, privacy_version, training_consent, training_consent_version from app_users where id=$1`, [userId]);
+  const u = row ?? await one(`select terms_version, privacy_version, training_consent, training_consent_version from app_users where id=$1`, [userId]);
   const cur = (k: string) => docs.find((d) => d.kind === k)?.version ?? null;
   const terms = { current: cur("terms"), accepted: u?.terms_version ?? null };
   const privacy = { current: cur("privacy"), accepted: u?.privacy_version ?? null };
@@ -72,7 +71,9 @@ export async function setTrainingConsent(userId: string, granted: boolean, sourc
   return consentStatus(userId);
 }
 
-export async function requireConsent(userId: string) {
-  const st = await consentStatus(userId);
+export type ConsentRow = { terms_version: string | null; privacy_version: string | null; training_consent: boolean | null; training_consent_version: string | null };
+
+export async function requireConsent(userId: string, row?: ConsentRow | null) {
+  const st = await consentStatus(userId, row);
   if (st.required) throw new HttpError(428, "consent_required", "Please review and accept the updated Terms of Service and Privacy Policy to continue.", { consent: st });
 }

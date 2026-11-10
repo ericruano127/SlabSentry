@@ -1,15 +1,19 @@
 import { validatePlansConfig, type Plan } from "@slabguard/core";
+import { cachedValue } from "./cache";
 import { q, type Q } from "./db";
 
-let cache: { at: number; plans: Plan[] } | null = null;
-const TTL = 30_000;
+const plansCache = cachedValue(30_000, () => readPlans(), { staleWhileRevalidate: true });
 
 export function invalidatePlans() {
-  cache = null;
+  plansCache.invalidate();
 }
 
+/** Cached for pooled reads; a transaction client (`c`) always reads fresh inside that transaction. */
 export async function loadPlans(c?: Q): Promise<Plan[]> {
-  if (!c && cache && Date.now() - cache.at < TTL) return cache.plans;
+  return c ? readPlans(c) : plansCache.get();
+}
+
+async function readPlans(c?: Q): Promise<Plan[]> {
   const plans = await q(`select * from subscription_plans order by rank`, [], c);
   const prices = await q(`select * from subscription_prices order by amount_cents`, [], c);
   const out: Plan[] = plans.map((p) => ({
@@ -17,7 +21,6 @@ export async function loadPlans(c?: Q): Promise<Plan[]> {
     features: p.features, marketingBullets: p.marketing_bullets, active: p.active,
     prices: prices.filter((x) => x.plan_id === p.id).map((x) => ({ id: x.id, interval: x.interval, amountCents: x.amount_cents, currency: x.currency, stripePriceId: x.stripe_price_id, appleProductId: x.apple_product_id, googleProductId: x.google_product_id, active: x.active })),
   }));
-  if (!c) cache = { at: Date.now(), plans: out };
   return out;
 }
 

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import pg from "pg";
 import { env } from "./env";
 
@@ -20,19 +21,23 @@ export const pool: pg.Pool = g.__pool ?? (g.__pool = new pg.Pool({
 
 export type Q = Pick<pg.PoolClient, "query">;
 
+/** Per-request database round-trip counter (set up by `handle()`); feeds metrics and slow-request logs. */
+export const queryScope = new AsyncLocalStorage<{ n: number }>();
+const counted = (c: Q): Q => { const s = queryScope.getStore(); if (s) s.n++; return c; };
+
 export async function q<T extends pg.QueryResultRow = any>(sql: string, params: unknown[] = [], c: Q = pool): Promise<T[]> {
-  return (await c.query<T>(sql, params)).rows;
+  return (await counted(c).query<T>(sql, params)).rows;
 }
 export async function one<T extends pg.QueryResultRow = any>(sql: string, params: unknown[] = [], c: Q = pool): Promise<T | null> {
-  return (await c.query<T>(sql, params)).rows[0] ?? null;
+  return (await counted(c).query<T>(sql, params)).rows[0] ?? null;
 }
 
 export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
   const c = await pool.connect();
   try {
-    await c.query("begin");
+    await counted(c).query("begin");
     const r = await fn(c);
-    await c.query("commit");
+    await counted(c).query("commit");
     return r;
   } catch (e) {
     await c.query("rollback").catch(() => {});
@@ -44,5 +49,5 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
 
 /** Serialize all credit/subscription mutations for one user within a transaction. */
 export async function lockUser(c: Q, userId: string) {
-  await c.query("select pg_advisory_xact_lock(hashtextextended($1, 42))", [userId]);
+  await counted(c).query("select pg_advisory_xact_lock(hashtextextended($1, 42))", [userId]);
 }

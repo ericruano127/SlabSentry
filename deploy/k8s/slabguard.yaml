@@ -81,7 +81,9 @@ spec:
           # VISION_THREADS matches OpenCV's pool to the CPU limit (benchmark: ~9 vCPU-s per analysis).
           env: [{ name: VISION_API_KEY, valueFrom: { secretKeyRef: { name: slabguard-secrets, key: VISION_API_KEY } } }, { name: VISION_THREADS, value: "2" }]
           resources: { requests: { cpu: "2", memory: 1Gi }, limits: { cpu: "2", memory: 2Gi } }
-          readinessProbe: { httpGet: { path: /health, port: 8001 }, periodSeconds: 10 }
+          # /health answers while an analysis runs (CPU work is off the event loop); OCR models load before readiness.
+          readinessProbe: { httpGet: { path: /health, port: 8001 }, periodSeconds: 10, timeoutSeconds: 2 }
+          livenessProbe: { httpGet: { path: /health, port: 8001 }, initialDelaySeconds: 30, periodSeconds: 20, timeoutSeconds: 2, failureThreshold: 3 }
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

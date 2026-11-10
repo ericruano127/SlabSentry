@@ -100,9 +100,30 @@ export async function runAnalysis(sessionId: string) {
     await q(`update submitted_images set quality=$2 where id=$1`, [img.id, JSON.stringify(img.quality)]);
   }
 
+  // Evidence cache per (kind, input hash): retakes re-run only what changed.
+  const cachedEvidence = async <T,>(kind: string, key: string, compute: () => Promise<T>): Promise<T> => {
+    const prev = await one(`select data from verification_evidence where session_id=$1 and kind=$2 and data->>'cacheKey'=$3 order by created_at desc limit 1`, [sessionId, kind, key]);
+    if (prev) return prev.data as T;
+    const data: any = { ...(await compute()), cacheKey: key };
+    await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,$3,$4,$5)`, [sessionId, run, kind, JSON.stringify(data), JSON.stringify({ source: "computed", tool: `vision/${kind}`, retrievedAt: new Date().toISOString() })]);
+    return data as T;
+  };
+  // Started now and awaited later: checks that need only the photos run alongside the holder
+  // inspection / record lookup instead of after them (shorter wait; same work). Rejections are
+  // observed where they're awaited; the no-op catch only prevents an unhandled-rejection warning.
+  const early = <T,>(p: Promise<T>) => (p.catch(() => {}), p);
+  const label = byRole("label_closeup")[0];
+  const forensicsP = early(Promise.all([front, label].filter(Boolean).map(async (img) =>
+    ({ img, f: await cachedEvidence("forensics", img.sha256, async () => vision.forensics(await load(img))) }))));
+  const edgeP = early(Promise.all(byRole("edge").slice(0, 6).map(async (img) => {
+    const prev = await one(`select data from verification_evidence where session_id=$1 and kind='edge_review' and data->>'imageId'=$2 order by created_at desc limit 1`, [sessionId, img.id]);
+    const r = prev?.data ?? { ...(await vision.edge(await load(img))), imageId: img.id };
+    if (!prev) await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,'edge_review',$3,$4)`, [sessionId, run, JSON.stringify(r), JSON.stringify({ source: "computed", tool: "vision/seam", retrievedAt: new Date().toISOString() })]);
+    return r;
+  })));
+
   await stage(15, "Inspecting the holder");
   // ---- 1. Holder inspection (cached by input hashes so retakes rerun only what changed)
-  const label = byRole("label_closeup")[0];
   // Tilt evidence: photo frames + frames extracted from the latest tilt video; near-duplicates removed
   // so a static sequence can't pose as several independent observations.
   const video = byRole("tilt_video")[0];
@@ -154,10 +175,10 @@ export async function runAnalysis(sessionId: string) {
   await stage(55, "Comparing with the reference");
   // ---- 5. Reference comparison (cached per image pair)
   const comparisons: EngineInput["comparisons"] = [];
-  for (const side of ["front", "back"] as const) {
+  const compareSide = async (side: "front" | "back") => {
     const up = byRole(side)[0];
     const ref = refs[side];
-    if (!up || !ref) continue;
+    if (!up || !ref) return null;
     const prev = await one(`select result from image_comparisons where session_id=$1 and upload_image_id=$2 and reference_image_id=$3 order by created_at desc limit 1`, [sessionId, up.id, ref.img.id]);
     let result: ComparisonResult;
     if (prev) result = prev.result;
@@ -169,17 +190,12 @@ export async function runAnalysis(sessionId: string) {
       result = { ...raw, overlays: ov };
     }
     await q(`insert into image_comparisons (session_id,analysis_run,side,upload_image_id,reference_image_id,result,tool_version) values ($1,$2,$3,$4,$5,$6,$7)`, [sessionId, run, side, up.id, ref.img.id, JSON.stringify(result), result.toolVersion]);
-    comparisons.push({ side, referenceSource: ref.source, result });
-  }
+    return { side, referenceSource: ref.source, result };
+  };
+  for (const c of await Promise.all([compareSide("front"), compareSide("back")])) if (c) comparisons.push(c); // front, then back
 
   // ---- 5b. Holder edge / seam close-ups (cached per image)
-  const edgeReviews: EngineInput["edgeReviews"] = [];
-  for (const img of byRole("edge").slice(0, 6)) {
-    const prev = await one(`select data from verification_evidence where session_id=$1 and kind='edge_review' and data->>'imageId'=$2 order by created_at desc limit 1`, [sessionId, img.id]);
-    const r = prev?.data ?? { ...(await vision.edge(await load(img))), imageId: img.id };
-    if (!prev) await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,'edge_review',$3,$4)`, [sessionId, run, JSON.stringify(r), JSON.stringify({ source: "computed", tool: "vision/seam", retrievedAt: new Date().toISOString() })]);
-    edgeReviews.push(r);
-  }
+  const edgeReviews: EngineInput["edgeReviews"] = await edgeP;
   const tiltVideo: EngineInput["tiltVideo"] = video?.quality?.metrics
     ? { videoId: video.id, durationSec: video.quality.metrics.durationSec, sampled: video.quality.metrics.sampled, distinctFrames: video.quality.metrics.distinctFrames, status: video.quality.ok ? "ok" : "too_few_distinct_frames" }
     : undefined;
@@ -187,16 +203,8 @@ export async function runAnalysis(sessionId: string) {
   await stage(75, "Running security and integrity checks");
   // ---- 5c. Phase C checks: image integrity, verified templates (label/UV/microprint), proportions,
   //          cert sightings and market value. Each is cached per input image hash.
-  const cachedEvidence = async <T,>(kind: string, key: string, compute: () => Promise<T>): Promise<T> => {
-    const prev = await one(`select data from verification_evidence where session_id=$1 and kind=$2 and data->>'cacheKey'=$3 order by created_at desc limit 1`, [sessionId, kind, key]);
-    if (prev) return prev.data as T;
-    const data: any = { ...(await compute()), cacheKey: key };
-    await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,$3,$4,$5)`, [sessionId, run, kind, JSON.stringify(data), JSON.stringify({ source: "computed", tool: `vision/${kind}`, retrievedAt: new Date().toISOString() })]);
-    return data as T;
-  };
   const integrity: EngineInput["integrity"] = [];
-  for (const img of [front, label].filter(Boolean)) {
-    const f = await cachedEvidence("forensics", img.sha256, async () => vision.forensics(await load(img)));
+  for (const { img, f } of await forensicsP) {
     integrity.push({ imageId: img.id, role: img.role, metadata: img.metadata_signals ?? null, forensics: f, liveCapture: img.provenance?.capture === "live" });
   }
   // Generation (era) decides which verified templates apply; same evidence the engine uses.
@@ -219,13 +227,16 @@ export async function runAnalysis(sessionId: string) {
     }
     return best;
   };
-  const lt: any = await bestMatch("label", "label_template", front, labelTpls, (b, t) => vision.labelTemplate(b, t, geometry));
   const uvImg = byRole("uv")[0];
   const closeup = byRole("security_closeup")[0];
+  const [lt, uvRes, mpRes]: any[] = await Promise.all([
+    bestMatch("label", "label_template", front, labelTpls, (b, t) => vision.labelTemplate(b, t, geometry)),
+    uvImg ? bestMatch("uv", "uv", uvImg, uvTpls, (b, t) => vision.uv(b, t)) : null,
+    closeup ? bestMatch("microprint", "microprint", closeup, mpTpls, (b, t) => vision.microprint(b, t)) : null,
+  ]);
   const templates: EngineInput["templates"] = {
     labelTemplateAvailable: labelTpls.length > 0, label: lt.label ?? null, proportions: lt.proportions ?? null,
-    uv: uvImg ? await bestMatch("uv", "uv", uvImg, uvTpls, (b, t) => vision.uv(b, t)) : null,
-    microprint: closeup ? await bestMatch("microprint", "microprint", closeup, mpTpls, (b, t) => vision.microprint(b, t)) : null,
+    uv: uvRes, microprint: mpRes,
   };
   const certSightings = grader && cert
     ? await recordAndCheck({ sessionId, userId: session.user_id, grader, cert, category: category.id, phash: lt.itemHash?.phash ?? null, dhash: lt.itemHash?.dhash ?? null })

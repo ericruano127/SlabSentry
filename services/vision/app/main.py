@@ -1,10 +1,12 @@
 import os
 import time
+from contextlib import asynccontextmanager
 
 # Decompression-bomb guard: must be set before OpenCV is imported.
 os.environ.setdefault("OPENCV_IO_MAX_IMAGE_PIXELS", str(60_000_000))
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 import base64
+import anyio
 import cv2
 from . import compare as cmp, forensics, holder, microprint, ocr, quality, seam, template, uv, video
 from .codes import decode_codes
@@ -31,7 +33,17 @@ def jsonable(v):
 
 
 MAX_BYTES = int(os.getenv("VISION_MAX_BYTES", str(15 * 1024 * 1024)))
-app = FastAPI(title="SlabGuard Vision", version="0.1.0")
+@asynccontextmanager
+async def _lifespan(_app):
+    """Load the OCR models before serving (otherwise each new pod's first analysis takes ~3 s longer).
+    Readiness probes only pass once this is done, so autoscaled pods join warm."""
+    if os.environ.get("VISION_WARMUP", "1") != "0":
+        import numpy as np
+        ocr.read_text(np.full((64, 256, 3), 255, np.uint8))
+    yield
+
+
+app = FastAPI(title="SlabGuard Vision", version="0.1.0", lifespan=_lifespan)
 
 
 def auth(x_vision_key: str | None = Header(default=None)):
@@ -40,12 +52,29 @@ def auth(x_vision_key: str | None = Header(default=None)):
         raise HTTPException(401, "invalid vision key")
 
 
+_limiter = None
+
+
+async def cpu(fn, *args):
+    """Run CPU-bound analysis on a worker thread so the event loop stays free (health/readiness probes keep
+    answering while an analysis runs). VISION_CONCURRENCY analyses run at once per process (default 1:
+    OpenCV already uses VISION_THREADS cores per call, so more would only oversubscribe the CPU limit)."""
+    global _limiter
+    if _limiter is None:
+        _limiter = anyio.CapacityLimiter(int(os.environ.get("VISION_CONCURRENCY", "1")))
+    return await anyio.to_thread.run_sync(lambda: fn(*args), limiter=_limiter)
+
+
+def _decode_limited(data: bytes):
+    return limit(decode(data))[0]
+
+
 async def load(f: UploadFile):
     data = await f.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "image too large")
     try:
-        return limit(decode(data))[0]
+        return await cpu(_decode_limited, data)
     except ValueError as e:
         raise HTTPException(422, str(e))
 
@@ -60,7 +89,7 @@ def health():
 async def quality_ep(image: UploadFile = File(...), role: str = Form("front"), geometry: str | None = Form(None)):
     t = time.perf_counter()
     item_rng, holder_rng = parse_geometry(geometry)
-    r = quality.assess(await load(image), role, item_rng, holder_rng)
+    r = await cpu(quality.assess, await load(image), role, item_rng, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 
@@ -68,14 +97,14 @@ async def quality_ep(image: UploadFile = File(...), role: str = Form("front"), g
 @app.post("/extract", dependencies=[Depends(auth)])
 async def extract_ep(image: UploadFile = File(...)):
     img = await load(image)
-    return {"codes": decode_codes(img), "ocr": ocr.read_text(img)}
+    return await cpu(lambda: {"codes": decode_codes(img), "ocr": ocr.read_text(img)})
 
 
 @app.post("/compare", dependencies=[Depends(auth)])
 async def compare_ep(upload: UploadFile = File(...), reference: UploadFile = File(...), upload_label_text: str | None = Form(None), geometry: str | None = Form(None)):
     t = time.perf_counter()
     item_rng, holder_rng = parse_geometry(geometry)
-    r = cmp.compare(await load(upload), await load(reference), upload_label_text.split("\n") if upload_label_text else None, item_rng, holder_rng)
+    r = await cpu(cmp.compare, await load(upload), await load(reference), upload_label_text.split("\n") if upload_label_text else None, item_rng, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 
@@ -93,7 +122,7 @@ async def holder_ep(
     frames = [await load(f) for f in (tilt or [])][:12]
     pair = (await load(normal), await load(backlit)) if normal and backlit else None
     _, holder_rng = parse_geometry(geometry)
-    r = holder.inspect(await load(front), await load(label) if label else None, frames, pair, holder_rng)
+    r = await cpu(holder.inspect, await load(front), await load(label) if label else None, frames, pair, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 
@@ -107,7 +136,7 @@ async def frames_ep(video_file: UploadFile = File(...), k: int = Form(6)):
     if len(data) > MAX_VIDEO_BYTES:
         raise HTTPException(413, "video too large")
     try:
-        r = video.extract_frames(data, max(3, min(k, 10)))
+        r = await cpu(video.extract_frames, data, max(3, min(k, 10)))
     except ValueError as e:
         raise HTTPException(422, str(e))
     for f in r["frames"]:
@@ -117,31 +146,35 @@ async def frames_ep(video_file: UploadFile = File(...), k: int = Form(6)):
 
 @app.post("/edge", dependencies=[Depends(auth)])
 async def edge_ep(image: UploadFile = File(...)):
-    return seam.review_edge(await load(image))
+    return await cpu(seam.review_edge, await load(image))
 
 
 @app.post("/forensics", dependencies=[Depends(auth)])
 async def forensics_ep(image: UploadFile = File(...)):
-    return jsonable(forensics.analyze(await load(image)))
+    return jsonable(await cpu(forensics.analyze, await load(image)))
 
 
 @app.post("/uv", dependencies=[Depends(auth)])
 async def uv_ep(image: UploadFile = File(...), template_image: UploadFile | None = File(None)):
-    return jsonable(uv.analyze(await load(image), await load(template_image) if template_image else None))
+    return jsonable(await cpu(uv.analyze, await load(image), await load(template_image) if template_image else None))
 
 
 @app.post("/microprint", dependencies=[Depends(auth)])
 async def microprint_ep(image: UploadFile = File(...), template_image: UploadFile | None = File(None)):
-    return jsonable(microprint.analyze(await load(image), await load(template_image) if template_image else None))
+    return jsonable(await cpu(microprint.analyze, await load(image), await load(template_image) if template_image else None))
 
 
 @app.post("/label-template", dependencies=[Depends(auth)])
 async def label_template_ep(image: UploadFile = File(...), template_image: UploadFile | None = File(None), geometry: str | None = Form(None)):
     item_rng, holder_rng = parse_geometry(geometry)
     img = await load(image)
-    out = {"proportions": template.proportions(img, holder_rng), "itemHash": template.item_hash(img, item_rng)}
-    if template_image:
-        out["label"] = template.compare_label(img, await load(template_image), holder_rng)
+    tpl = await load(template_image) if template_image else None
+    def run():
+        out = {"proportions": template.proportions(img, holder_rng), "itemHash": template.item_hash(img, item_rng)}
+        if tpl is not None:
+            out["label"] = template.compare_label(img, tpl, holder_rng)
+        return out
+    out = await cpu(run)
     return jsonable(out)
 
 
@@ -149,7 +182,7 @@ async def label_template_ep(image: UploadFile = File(...), template_image: Uploa
 async def label_crop_ep(image: UploadFile = File(...), geometry: str | None = Form(None)):
     """Normalised label crop used to register a verified template (staff tooling)."""
     _, holder_rng = parse_geometry(geometry)
-    lab, _ = template.label_crop(await load(image), holder_rng)
+    lab, _ = await cpu(template.label_crop, await load(image), holder_rng)
     if lab is None:
         raise HTTPException(422, "label region not found")
     return {"jpeg": base64.b64encode(cv2.imencode(".jpg", lab, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tobytes()).decode()}

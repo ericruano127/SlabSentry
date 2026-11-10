@@ -1,0 +1,96 @@
+{
+  "base": "http://localhost:3100",
+  "users": 2000,
+  "at": "2026-11-10T22:36:25.863Z",
+  "node": "v22.23.4",
+  "results": [
+    {
+      "name": "stress",
+      "connections": 100,
+      "duration": 15,
+      "rps": 938,
+      "total": 14067,
+      "p50": 111,
+      "p90": 203,
+      "p99": 300,
+      "max": 326,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 14067,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 250,
+      "duration": 15,
+      "rps": 1100,
+      "total": 16495,
+      "p50": 238,
+      "p90": 469,
+      "p99": 662,
+      "max": 786,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 16495,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 500,
+      "duration": 15,
+      "rps": 945,
+      "total": 14172,
+      "p50": 608,
+      "p90": 874,
+      "p99": 3219,
+      "max": 4273,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 14172,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "stress",
+      "connections": 1000,
+      "duration": 15,
+      "rps": 911,
+      "total": 13669,
+      "p50": 980,
+      "p90": 2115,
+      "p99": 5927,
+      "max": 6856,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 13669,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    }
+  ]
+}

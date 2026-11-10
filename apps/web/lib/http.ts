@@ -1,3 +1,4 @@
+import { queryScope } from "./db";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { log, reportError } from "./log";
@@ -17,8 +18,9 @@ export function handle<A extends unknown[]>(fn: (...a: A) => Promise<Response>) 
     const started = Date.now();
     const route = req ? new URL(req.url).pathname.replace(/[0-9a-f-]{36}/g, ":id") : "?";
     let res: Response;
+    const scope = { n: 0 };
     try {
-      res = await fn(...a);
+      res = await queryScope.run(scope, () => fn(...a));
     } catch (e) {
       if (e instanceof HttpError) res = json({ error: e.code, message: e.message, ...e.extra }, e.status);
       else if (e instanceof ZodError) res = json({ error: "invalid_request", issues: e.issues }, 400);
@@ -28,8 +30,9 @@ export function handle<A extends unknown[]>(fn: (...a: A) => Promise<Response>) 
       }
     }
     res.headers.set("x-request-id", requestId);
-    httpStats.record(route, res.status, Date.now() - started);
-    if (res.status >= 500 || Date.now() - started > 2000) log(res.status >= 500 ? "error" : "warn", "slow or failed request", { route, status: res.status, ms: Date.now() - started, requestId });
+    httpStats.record(route, res.status, Date.now() - started, scope.n);
+    if (process.env.NODE_ENV !== "production" || process.env.EXPOSE_QUERY_COUNT === "1") res.headers.set("x-db-queries", String(scope.n));
+    if (res.status >= 500 || Date.now() - started > 2000) log(res.status >= 500 ? "error" : "warn", "slow or failed request", { route, status: res.status, ms: Date.now() - started, dbQueries: scope.n, requestId });
     return res;
   };
 }
@@ -40,7 +43,9 @@ export const httpStats = {
   latency: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5].map((le) => ({ le, n: 0 })),
   count: 0,
   sum: 0,
-  record(route: string, status: number, ms: number) {
+  dbQueries: 0,
+  record(route: string, status: number, ms: number, queries = 0) {
+    this.dbQueries += queries;
     const k = `${Math.floor(status / 100)}xx`;
     this.byStatus.set(k, (this.byStatus.get(k) ?? 0) + 1);
     this.count++;

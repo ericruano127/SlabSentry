@@ -1,0 +1,74 @@
+{
+  "base": "http://localhost:3100",
+  "users": 2000,
+  "at": "2026-11-10T22:35:23.432Z",
+  "node": "v22.23.4",
+  "results": [
+    {
+      "name": "browse",
+      "connections": 50,
+      "duration": 20,
+      "rps": 931,
+      "total": 18612,
+      "p50": 61,
+      "p90": 95,
+      "p99": 131,
+      "max": 283,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 18612,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "browse",
+      "connections": 200,
+      "duration": 20,
+      "rps": 978,
+      "total": 19559,
+      "p50": 220,
+      "p90": 395,
+      "p99": 555,
+      "max": 720,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 19559,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    },
+    {
+      "name": "browse",
+      "connections": 500,
+      "duration": 20,
+      "rps": 957,
+      "total": 19145,
+      "p50": 638,
+      "p90": 948,
+      "p99": 2060,
+      "max": 3148,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "statuses": {
+        "1xx": 0,
+        "2xx": 19145,
+        "3xx": 0,
+        "4xx": 0,
+        "5xx": 0
+      },
+      "failRate": 0
+    }
+  ]
+}

@@ -29,7 +29,7 @@ export async function entitlementsFor(userId: string, c?: Q, now = new Date()): 
 }
 
 /** Ensure the allowance row for the current subscription window exists and reflects the current plan. */
-async function currentPeriodAllowance(c: Q, userId: string, ent: Entitlements) {
+async function currentPeriodAllowance(c: Q | undefined, userId: string, ent: Entitlements) {
   if (!ent.subscription || !ent.window) return null;
   return one(
     `insert into verification_allowances (user_id,kind,plan_id,subscription_id,period_start,period_end,granted)
@@ -63,12 +63,22 @@ export interface UsageSummary {
   billingInterval: string | null;
 }
 
+/** Read-only summary for display: two queries (subscriptions + all allowance rows). The subscription
+ * period row is written only when it's missing or out of date, never on every request. */
 export async function usageSummary(userId: string, c?: Q, now = new Date()): Promise<UsageSummary> {
-  const run = async (cx: Q) => {
+  // cx undefined → pooled queries (and the cached plan list); a transaction client is used when given.
+  const run = async (cx?: Q) => {
     const { ent } = await entitlementsFor(userId, cx, now);
-    const period = await currentPeriodAllowance(cx, userId, ent);
-    const free = await one(`select * from verification_allowances where user_id=$1 and kind='lifetime_free'`, [userId], cx);
-    const grants = await q(`select coalesce(sum(granted-used-reserved),0)::int as rem from verification_allowances where user_id=$1 and kind='admin_grant' and (period_end is null or period_end > $2)`, [userId, now.toISOString()], cx);
+    const rows = await q(
+      `select * from verification_allowances where user_id=$1 and (kind='lifetime_free' or (kind='admin_grant' and (period_end is null or period_end > $2))
+         or (kind='subscription_period' and period_start=$3::timestamptz))`,
+      [userId, now.toISOString(), ent.window?.start ?? null], cx);
+    let period = ent.subscription && ent.window ? rows.find((r) => r.kind === "subscription_period") ?? null : null;
+    if (ent.subscription && ent.window && (!period || period.granted !== ent.monthlyAllowance || period.plan_id !== ent.planId || period.subscription_id !== ent.subscription.id
+        || new Date(period.period_end).getTime() !== new Date(ent.window.end).getTime()))
+      period = await currentPeriodAllowance(cx, userId, ent);
+    const free = rows.find((r) => r.kind === "lifetime_free") ?? null;
+    const grants = [{ rem: rows.filter((r) => r.kind === "admin_grant").reduce((n, r) => n + (r.granted - r.used - r.reserved), 0) }];
     const pr = period ? Math.max(0, period.granted - period.used - period.reserved) : 0;
     const fr = free ? Math.max(0, free.granted - free.used - free.reserved) : 0;
     return {
@@ -81,7 +91,7 @@ export async function usageSummary(userId: string, c?: Q, now = new Date()): Pro
       subscriptionProvider: ent.subscription?.provider ?? null, billingInterval: ent.subscription?.interval ?? null,
     };
   };
-  return c ? run(c) : tx(run);
+  return run(c);
 }
 
 export type ReserveResult = { status: "reserved" | "already_reserved" | "already_consumed"; allowanceId: string | null; attempt: number };

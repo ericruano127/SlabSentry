@@ -51,6 +51,16 @@ were at 93 % or more user time. Adding workers or vision processes on the same m
 **Cost: about 9 vCPU-seconds per analysis** (36 s × 4 vCPU / 16), roughly 6–7 analyses per minute per vCPU.
 Analysis throughput therefore scales with the **total vision CPU** across pods, not with worker count.
 
+### After the performance pass
+See `docs/PERFORMANCE.md`. In summary:
+- one process now serves about 950–1,080 req/s (up from 850–900);
+- the median at 1,000 connections roughly halved (2.1 s → 1.1 s);
+- `/api/me` makes 3 database round-trips instead of 10;
+- analysis wait is about 15% shorter with multiple analysis pods;
+- analysis pods answer health checks while busy.
+
+At overload, the slowest 1% is now limited by queueing for the process's 10 database connections. Scale out, and don't raise the pool: 25 was worse.
+
 ## 2. Capacity model for 10,000 concurrent users
 
 Assumptions (replace with product analytics once available):
@@ -63,7 +73,7 @@ Assumptions (replace with product analytics once available):
 | Web/API | 400 rps per 1-vCPU pod at the 60 % HPA target (half the measured single-process value) | 3,000 rps | ≈ 8 pods | HPA 4–60 |
 | Vision | 2-vCPU pod ≈ 13 analyses/min (9 vCPU-s each) | 100/min normal, 500/min burst | 8–12 pods normal, ≈ 40–60 burst | HPA 4–120, `VISION_THREADS=2` |
 | Workers | I/O-bound (wait on vision); 1 job at a time | ≈ 1–2 per vision pod | KEDA on queue depth (target 4 per worker) | 2–80 |
-| Postgres | Each authenticated request makes about 3–4 queries (user, consent, entitlements, data) | 3,000 rps → ≈ 10–12k qps | Managed Postgres sized for this, **behind PgBouncer** (transaction mode is safe: advisory locks are transaction-scoped); keep `DB_POOL_MAX × processes` under the pooler limit | external |
+| Postgres | Each authenticated request makes about 3 round-trips (user, entitlements, data); see `test/queryBudget.test.ts` | 3,000 rps → ≈ 6–9k qps | Managed Postgres sized for this, **behind PgBouncer** (transaction mode is safe: advisory locks are transaction-scoped); keep `DB_POOL_MAX × processes` under the pooler limit | external |
 | Redis | INCR + EXPIRE per rate-limited call | ≈ 3k ops/s | A single small instance is plenty | external |
 | PSA API | 100 calls/day by default (2 per lookup) | **This is the real ceiling, not compute** | Global quota (`PSA_DAILY_LIMIT`). When exhausted, users get a partial report with the credit released. **A higher API tier is needed before launch.** | n/a |
 

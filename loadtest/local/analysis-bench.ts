@@ -20,6 +20,7 @@ const args = process.argv.slice(2);
 const opt = (k: string, d: string) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
 const N = Number(opt("sessions", "24"));
 const WORKERS = opt("workers", "1,2,4").split(",").map(Number);
+const DEEP = args.includes("--deep"); // adds a label close-up and a back reference (more checks per analysis)
 const FIX = process.env.FIXTURES_DIR ?? "/tmp/claude-0/fixtures";
 const img = (n: string) => readFileSync(`${FIX}/${n}`);
 const web = path.resolve(__dirname, "../../apps/web");
@@ -33,6 +34,10 @@ async function seed(n: number) {
     await addImage(u, s, "front", img(i % 2 ? "front_genuine.jpg" : "front_other_copy.jpg"));
     await addImage(u, s, "back", img("front_different_card.jpg"));
     await addImage(u, s, "reference_front", img("reference.jpg"), { attestation: "bench" });
+    if (DEEP) {
+      await addImage(u, s, "label_closeup", img("reference_labeled.jpg"));
+      await addImage(u, s, "reference_back", img("front_different_card.jpg"), { attestation: "bench" });
+    }
     await reserveCredit(u, s);
     await enqueueAnalysis(s, 0);
   }

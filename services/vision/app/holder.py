@@ -22,8 +22,9 @@ TILT_HOLO_FRAC = 0.01
 BACKLIT_DELTA = 18.0
 
 
-def _label_crop(img, rng=geometry._DEFAULT):
-    q = geometry.find_slab(img, rng)
+def _label_crop(img, rng=geometry._DEFAULT, q=...):
+    if q is ...:
+        q = geometry.find_slab(img, rng)
     if q is None:
         return None, None
     slab, _ = geometry.warp(img, q.pts, SLAB_W, SLAB_H)
@@ -51,7 +52,8 @@ def inspect(front: np.ndarray, label_closeup: np.ndarray | None = None, tilt_fra
         out["edgesVisible"] = {"top": False, "bottom": False, "left": False, "right": False}
         out["edgeStraightness"] = {"maxDeviationPct": 0.0, "status": "not_visible"}
 
-    sources = [s for s in (label_closeup, _label_crop(front, holder_rng)[0], front) if s is not None]
+    crop = _label_crop(front, holder_rng, q)[0] if q is not None else None  # slab found once above, reused
+    sources = [s for s in (label_closeup, crop, front) if s is not None]
     codes: dict[str, str] = {}
     for s in sources:
         for c in decode_codes(s):
@@ -60,7 +62,7 @@ def inspect(front: np.ndarray, label_closeup: np.ndarray | None = None, tilt_fra
             break
     out["codes"] = [{"type": t, "data": d} for d, t in codes.items()]
 
-    text_src = label_closeup if label_closeup is not None else (_label_crop(front, holder_rng)[0] if q is not None else front)
+    text_src = label_closeup if label_closeup is not None else (crop if q is not None else front)
     out["ocrText"] = [r["text"] for r in ocr.read_text(text_src)] if text_src is not None else []
 
     if tilt_frames and len(tilt_frames) >= 2:

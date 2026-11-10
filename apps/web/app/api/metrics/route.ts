@@ -28,6 +28,7 @@ export async function GET(req: Request) {
     "# TYPE slabguard_http_request_seconds histogram",
     ...httpStats.latency.map((b) => `slabguard_http_request_seconds_bucket{le="${b.le}"} ${b.n}`), `slabguard_http_request_seconds_bucket{le="+Inf"} ${httpStats.count}`,
     `slabguard_http_request_seconds_sum ${httpStats.sum.toFixed(3)}`, `slabguard_http_request_seconds_count ${httpStats.count}`,
+    "# HELP slabguard_db_queries_total Database round-trips made while serving API requests", "# TYPE slabguard_db_queries_total counter", `slabguard_db_queries_total ${httpStats.dbQueries}`,
     "# TYPE slabguard_rate_limited_total counter", `slabguard_rate_limited_total ${limiterStats.rejected}`,
     "# TYPE slabguard_errors_total counter", `slabguard_errors_total ${errorStats.count}`,
   ];

@@ -1,3 +1,4 @@
+import { cachedValue } from "./cache";
 import { templateFingerprint } from "./templates";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -66,11 +67,15 @@ export async function publishRelease(actor: { id: string; role: string }, id: nu
       if (actor.role !== "owner") throw new HttpError(403, "forbidden", "Only an owner can override the accuracy gate.");
     }
     await c.query(`update releases set status='published', published_by=$2, published_at=now(), gate_override_reason=$3 where id=$1`, [id, actor.id, r.gate?.pass ? null : override]);
+    notesCache.invalidate();
     await c.query(`insert into admin_audit_log (admin_id,action,after) values ($1,'release.publish',$2)`, [actor.id, JSON.stringify({ id, version: r.version, gate: r.gate, override: override ?? null })]);
     return { id, version: r.version };
   });
 }
 
+const readNotes = (limit: number) => q(`select version, published_at, public_notes from releases where status='published' order by published_at desc limit $1`, [limit]);
+/** Public patch notes (latest 30 cached per instance; cleared on publish here, other instances catch up within ~30 s). */
+const notesCache = cachedValue(30_000, () => readNotes(30), { staleWhileRevalidate: true });
 export async function publicReleaseNotes(limit = 30) {
-  return q(`select version, published_at, public_notes from releases where status='published' order by published_at desc limit $1`, [limit]);
+  return limit === 30 ? notesCache.get() : readNotes(limit);
 }

@@ -1,3 +1,4 @@
+import { cachedValue } from "./cache";
 import { createHash } from "node:crypto";
 import { canonicalJson, compileLibrary, DEFAULT_LIBRARY, LibrarySchema, type CompiledLibrary } from "@slabguard/core";
 import { one, q, tx } from "./db";
@@ -10,21 +11,22 @@ import { HttpError } from "./http";
  */
 export const sha256 = (v: unknown) => createHash("sha256").update(canonicalJson(v)).digest("hex");
 
-let cache: { at: number; lib: CompiledLibrary } | null = null;
-const TTL = 60_000;
-export function invalidateLibrary() { cache = null; }
+// Single-flight, but no stale serving: a failed integrity check must pause analysis at once.
+const libCache = cachedValue(60_000, () => readLibrary());
+export function invalidateLibrary() { libCache.invalidate(); }
 
 export async function loadLibrary(): Promise<CompiledLibrary> {
-  if (cache && Date.now() - cache.at < TTL) return cache.lib;
+  return libCache.get();
+}
+
+async function readLibrary(): Promise<CompiledLibrary> {
   const r = await one(`select id, version, content, content_sha256 from library_releases where status='published'`);
   if (!r) throw new HttpError(503, "library_unavailable", "Reference library is not published yet.");
   if (sha256(r.content) !== r.content_sha256) {
     console.error(`SECURITY: library release ${r.version} failed its integrity check`);
     throw new HttpError(503, "library_integrity", "Reference library integrity check failed. Analysis is paused until it is restored.");
   }
-  const lib = compileLibrary(r.content, { version: r.version, sha256: r.content_sha256 });
-  cache = { at: Date.now(), lib };
-  return lib;
+  return compileLibrary(r.content, { version: r.version, sha256: r.content_sha256 });
 }
 
 /** Seed the first release from the built-in library (fresh installs only). */
