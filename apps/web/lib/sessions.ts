@@ -3,6 +3,7 @@ import { one, q } from "./db";
 import { env } from "./env";
 import { HttpError } from "./http";
 import { storage } from "./storage";
+import { loadLibrary } from "./library";
 import { MetadataError, sanitize, type MetadataSignals } from "./metadata";
 import { vision, VisionUnavailable } from "./vision";
 
@@ -60,7 +61,10 @@ export async function addImage(userId: string, sessionId: string, role: Role, ra
       const ok = r.status === "ok";
       quality = { ok, score: ok ? 1 : 0.4, metrics: { durationSec: r.durationSec, distinctFrames: r.distinctFrames, sampled: r.sampled },
         issues: ok ? [] : [{ issue: "too_few_frames", severity: "major", guidance: "We found too few distinct frames. Tilt the slab slowly through a wider angle (about 30°) for 3–5 seconds under a single light." }] };
-    } else quality = await vision.quality(data, role);
+    } else {
+      const cat = (await loadLibrary()).category((await one(`select category from verification_sessions where id=$1`, [sessionId]))?.category);
+      quality = await vision.quality(data, role, { itemAspect: cat.geometry.itemAspect, holderAspect: cat.geometry.holderAspect });
+    }
   } catch (e) {
     if ((e as any).code === "unreadable_image") throw new HttpError(422, "unreadable_image", "We couldn't read that image file. Try another photo.");
     if (!(e instanceof VisionUnavailable)) throw e;

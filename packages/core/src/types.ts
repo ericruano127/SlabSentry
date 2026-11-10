@@ -1,7 +1,8 @@
 // Shared domain types. Every evidence item carries provenance so the report can
 // separate verified facts, visual inference, and unresolved uncertainty.
 
-export type GraderId = "PSA" | "CGC" | "BGS" | "SGC" | "TAG" | "AGS";
+/** Grader ids come from the reference library (data-driven), e.g. "PSA", "CGC", "WATA". */
+export type GraderId = string;
 export type VerificationMode = "in_hand" | "online_listing";
 
 export type ImageRole =
@@ -84,9 +85,10 @@ export interface OfficialCertRecord {
   cardNumber?: string;
   variety?: string; // parallel
   grade?: string;
-  labelType?: string;
+  labelType?: string; // official label/holder type — identifies the current holder generation
+  gradingDate?: string; // only when the grader officially exposes it (YYYY-MM[-DD])
   imageUrls?: { front?: string; back?: string };
-  verificationUrl: string;
+  verificationUrl: string | null; // null when the grader's official lookup URL is not confirmed yet
   provenance: Provenance;
   raw?: unknown;
 }
@@ -207,7 +209,8 @@ export interface RiskFinding {
     | "case_alteration_possible"
     | "listing_photo_reuse"
     | "screenshot_of_reference"
-    | "insufficient_evidence";
+    | "insufficient_evidence"
+    | "era_mismatch";
   summary: string;
   explanation: string;
   observationIds: string[];

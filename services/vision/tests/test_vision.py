@@ -198,3 +198,23 @@ def test_label_comparison_tolerates_ocr_segmentation():
     # upload text as a label close-up would give it: separate words
     r = compare_labels(up, ref, ["PSA", "10", "GEM MT", "12345678"])
     assert r["status"] == "consistent" and not r["certConflict"], r
+
+
+def test_category_geometry_generic_shapes():
+    """Comic-shaped item (aspect 0.60) is outside card priors; generic geometry still finds and aligns it."""
+    art = synth.artwork(21, w=840, h=1400)
+    item = synth.card(art)
+    ref = synth.photo(synth.slab(item), seed=1)
+    up = synth.photo(synth.slab(item), angle=2, scale=0.85, seed=5)
+    card_priors = compare.compare(up, ref)
+    assert not card_priors["diagnostics"]["cardDetected"]["upload"]
+    generic = compare.compare(up, ref, None, None, None)
+    assert generic["diagnostics"]["cardDetected"]["upload"], generic["diagnostics"]
+    assert generic["designMatch"]["status"] == "consistent"
+    assert generic["centering"]["status"] == "consistent", generic["centering"]
+
+
+def test_geometry_form_field():
+    from app.geometry import parse_geometry, _DEFAULT
+    assert parse_geometry(None) == (_DEFAULT, _DEFAULT)
+    assert parse_geometry('{"itemAspect": null, "holderAspect": [0.5, 0.7]}') == (None, (0.5, 0.7))

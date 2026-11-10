@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadF
 import base64
 from . import compare as cmp, holder, ocr, quality, seam, video
 from .codes import decode_codes
+from .geometry import parse_geometry
 from .imaging import decode, limit
 
 MAX_BYTES = int(os.getenv("VISION_MAX_BYTES", str(15 * 1024 * 1024)))
@@ -35,9 +36,10 @@ def health():
 
 
 @app.post("/quality", dependencies=[Depends(auth)])
-async def quality_ep(image: UploadFile = File(...), role: str = Form("front")):
+async def quality_ep(image: UploadFile = File(...), role: str = Form("front"), geometry: str | None = Form(None)):
     t = time.perf_counter()
-    r = quality.assess(await load(image), role)
+    item_rng, holder_rng = parse_geometry(geometry)
+    r = quality.assess(await load(image), role, item_rng, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 
@@ -49,9 +51,10 @@ async def extract_ep(image: UploadFile = File(...)):
 
 
 @app.post("/compare", dependencies=[Depends(auth)])
-async def compare_ep(upload: UploadFile = File(...), reference: UploadFile = File(...), upload_label_text: str | None = Form(None)):
+async def compare_ep(upload: UploadFile = File(...), reference: UploadFile = File(...), upload_label_text: str | None = Form(None), geometry: str | None = Form(None)):
     t = time.perf_counter()
-    r = cmp.compare(await load(upload), await load(reference), upload_label_text.split("\n") if upload_label_text else None)
+    item_rng, holder_rng = parse_geometry(geometry)
+    r = cmp.compare(await load(upload), await load(reference), upload_label_text.split("\n") if upload_label_text else None, item_rng, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 
@@ -63,11 +66,13 @@ async def holder_ep(
     tilt: list[UploadFile] | None = File(None),
     normal: UploadFile | None = File(None),
     backlit: UploadFile | None = File(None),
+    geometry: str | None = Form(None),
 ):
     t = time.perf_counter()
     frames = [await load(f) for f in (tilt or [])][:12]
     pair = (await load(normal), await load(backlit)) if normal and backlit else None
-    r = holder.inspect(await load(front), await load(label) if label else None, frames, pair)
+    _, holder_rng = parse_geometry(geometry)
+    r = holder.inspect(await load(front), await load(label) if label else None, frames, pair, holder_rng)
     r["elapsedMs"] = round((time.perf_counter() - t) * 1000)
     return r
 

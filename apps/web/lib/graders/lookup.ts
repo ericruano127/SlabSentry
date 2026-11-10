@@ -1,4 +1,4 @@
-import { officialLookupUrl, type GraderId, type OfficialCertRecord } from "@slabguard/core";
+import { officialLookupUrl, type CompiledLibrary, type GraderId, type OfficialCertRecord } from "@slabguard/core";
 import { env } from "../env";
 
 /**
@@ -12,12 +12,12 @@ export interface LookupResult {
   providerError?: string;
 }
 
-export async function lookupCert(grader: GraderId, cert: string): Promise<LookupResult> {
+export async function lookupCert(grader: GraderId, cert: string, lib: CompiledLibrary): Promise<LookupResult> {
   const now = new Date().toISOString();
-  const link = officialLookupUrl(grader, cert);
+  const link = officialLookupUrl(grader, cert, lib);
   if (grader === "PSA" && env.psaToken) return psaLookup(cert, link);
   return {
-    record: { grader, certNumber: cert, found: null, verificationUrl: link, provenance: { source: "official_link", url: link, retrievedAt: now, note: grader === "PSA" ? "PSA API token not configured" : "no permitted programmatic access" } },
+    record: { grader, certNumber: cert, found: null, verificationUrl: link, provenance: { source: "official_link", url: link ?? undefined, retrievedAt: now, note: grader === "PSA" ? "PSA API token not configured" : link ? "no permitted programmatic access" : "official lookup not yet confirmed for this grader" } },
     images: [],
     imageAvailability: "not_checked",
   };
@@ -33,7 +33,7 @@ async function psaGet(path: string) {
   return t ? JSON.parse(t) : null;
 }
 
-async function psaLookup(cert: string, link: string): Promise<LookupResult> {
+async function psaLookup(cert: string, link: string | null): Promise<LookupResult> {
   const now = new Date().toISOString();
   const prov = { source: "official_api" as const, url: `${PSA}/cert/GetByCertNumber/${cert}`, retrievedAt: now, tool: "psa-public-api" };
   try {

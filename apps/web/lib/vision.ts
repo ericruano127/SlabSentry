@@ -21,14 +21,18 @@ async function post<T>(p: string, files: Record<string, Buffer | Buffer[] | unde
   return r.json() as Promise<T>;
 }
 
+/** Category shape priors from the reference library (short/long side ratio ranges; null = any shape). */
+export type Geometry = { itemAspect: [number, number] | null; holderAspect: [number, number] | null };
+const geo = (g?: Geometry): Record<string, string> => (g ? { geometry: JSON.stringify(g) } : {});
+
 export const vision = {
-  quality: (img: Buffer, role: string) => post<QualityReport & { elapsedMs: number }>("/quality", { image: img }, { role }, 20_000),
+  quality: (img: Buffer, role: string, g?: Geometry) => post<QualityReport & { elapsedMs: number }>("/quality", { image: img }, { role, ...geo(g) }, 20_000),
   extract: (img: Buffer) => post<{ codes: { type: string; data: string }[]; ocr: { text: string; score: number }[] }>("/extract", { image: img }),
-  compare: (upload: Buffer, reference: Buffer, uploadLabelText?: string[]) =>
-    post<ComparisonResult & { elapsedMs: number; overlays: Record<string, string | undefined> }>("/compare", { upload, reference }, uploadLabelText?.length ? { upload_label_text: uploadLabelText.join("\n") } : {}, 120_000),
+  compare: (upload: Buffer, reference: Buffer, uploadLabelText?: string[], g?: Geometry) =>
+    post<ComparisonResult & { elapsedMs: number; overlays: Record<string, string | undefined> }>("/compare", { upload, reference }, { ...(uploadLabelText?.length ? { upload_label_text: uploadLabelText.join("\n") } : {}), ...geo(g) }, 120_000),
   frames: (video: Buffer, k = 6) =>
     post<{ durationSec: number; sampled: number; distinctFrames: number; status: "ok" | "too_few_distinct_frames"; frames: { t: number; sharpness: number; jpeg: string }[] }>("/frames", { video_file: video }, { k: String(k) }, 90_000),
   edge: (img: Buffer) => post<{ status: string; anomalies?: number; regions?: any[]; note?: string }>("/edge", { image: img }),
-  holder: (f: { front: Buffer; label?: Buffer; tilt?: Buffer[]; normal?: Buffer; backlit?: Buffer }) =>
-    post<HolderInspectionResult & { elapsedMs: number }>("/holder", f),
+  holder: (f: { front: Buffer; label?: Buffer; tilt?: Buffer[]; normal?: Buffer; backlit?: Buffer }, g?: Geometry) =>
+    post<HolderInspectionResult & { elapsedMs: number }>("/holder", f, geo(g)),
 };

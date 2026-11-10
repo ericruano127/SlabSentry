@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  buildReport, detectGrader, extractCertCandidates, GRADERS, hasFeature, runEngine,
+  buildReport, detectGrader, extractCertCandidates, hasFeature, runEngine, type CompiledLibrary,
   type ComparisonResult, type EngineInput, type GraderId, type HolderInspectionResult, type OfficialCertRecord, type QualityReport,
 } from "@slabguard/core";
 import { one, q } from "./db";
@@ -11,16 +11,17 @@ import { lookupCert, type LookupResult } from "./graders/lookup";
 import { webDetection } from "./reverse-image";
 import { distinctImages } from "@slabguard/core";
 import { activeImages, storeVideoFrames } from "./sessions";
+import { loadLibrary } from "./library";
 import { sanitize } from "./metadata";
 import { storage } from "./storage";
 import { vision } from "./vision";
 
 const LOOKUP_TTL_H = 24;
 
-async function cachedLookup(grader: GraderId, cert: string): Promise<LookupResult> {
+async function cachedLookup(grader: GraderId, cert: string, lib: CompiledLibrary): Promise<LookupResult> {
   const c = await one(`select data from cert_lookups where grader=$1 and cert_number=$2 and fetched_at > now() - make_interval(hours => $3)`, [grader, cert, LOOKUP_TTL_H]);
   if (c) return c.data;
-  const r = await lookupCert(grader, cert);
+  const r = await lookupCert(grader, cert, lib);
   if (r.record.found !== null && !r.providerError) {
     await q(`insert into cert_lookups (grader,cert_number,data) values ($1,$2,$3) on conflict (grader,cert_number) do update set data=excluded.data, fetched_at=now()`, [grader, cert, JSON.stringify(r)]);
   }
@@ -74,6 +75,10 @@ export async function runAnalysis(sessionId: string) {
   const t0 = Date.now();
   await q(`update verification_sessions set status='processing', error=null, updated_at=now() where id=$1`, [sessionId]);
   const { ent } = await entitlementsFor(session.user_id);
+  // Published reference library (integrity-checked) + this session's category.
+  const lib = await loadLibrary();
+  const category = lib.category(session.category);
+  const geometry = { itemAspect: category.geometry.itemAspect, holderAspect: category.geometry.holderAspect };
   const images = await activeImages(sessionId);
   const byRole = (r: string) => images.filter((i) => i.role === r);
   const front = byRole("front")[0];
@@ -85,7 +90,7 @@ export async function runAnalysis(sessionId: string) {
       const r = await vision.frames(await load(img));
       await storeVideoFrames(session.user_id, sessionId, img.id, r.frames);
       img.quality = { ok: r.status === "ok", score: 1, issues: [], metrics: { durationSec: r.durationSec, distinctFrames: r.distinctFrames, sampled: r.sampled } };
-    } else img.quality = await vision.quality(await load(img), img.role);
+    } else img.quality = await vision.quality(await load(img), img.role, geometry);
     await q(`update submitted_images set quality=$2 where id=$1`, [img.id, JSON.stringify(img.quality)]);
   }
 
@@ -100,7 +105,7 @@ export async function runAnalysis(sessionId: string) {
   const holderKey = [front, label, backlit, ...tilt].filter(Boolean).map((i) => i.sha256).join(":");
   let holder: HolderInspectionResult | null = (await one(`select data from verification_evidence where session_id=$1 and kind='holder' and data->>'inputKey'=$2 order by created_at desc limit 1`, [sessionId, holderKey]))?.data ?? null;
   if (!holder) {
-    holder = await vision.holder({ front: await load(front), label: label && (await load(label)), tilt: await Promise.all(tilt.map(load)), normal: backlit && label ? await load(label) : undefined, backlit: backlit && label ? await load(backlit) : undefined });
+    holder = await vision.holder({ front: await load(front), label: label && (await load(label)), tilt: await Promise.all(tilt.map(load)), normal: backlit && label ? await load(label) : undefined, backlit: backlit && label ? await load(backlit) : undefined }, geometry);
     (holder as any).inputKey = holderKey;
     await recordCost(sessionId, session.user_id, "vision_cpu_second", ((holder as any).elapsedMs ?? 0) / 1000);
   }
@@ -110,9 +115,9 @@ export async function runAnalysis(sessionId: string) {
   let grader: GraderId | null = session.grader;
   let cert: string | null = session.cert_number;
   let certSource = session.cert_source as EngineInput["certSource"];
-  if (!grader) grader = detectGrader({ codes: holder.codes.map((c) => c.data), ocrText: holder.ocrText })[0]?.grader ?? null;
+  if (!grader) grader = detectGrader({ codes: holder.codes.map((c) => c.data), ocrText: holder.ocrText }, lib, category.id)[0]?.grader ?? null;
   if (!cert) {
-    const cand = extractCertCandidates(grader, { codes: holder.codes.map((c) => c.data), ocrText: holder.ocrText })[0];
+    const cand = extractCertCandidates(grader, { codes: holder.codes.map((c) => c.data), ocrText: holder.ocrText }, lib, category.id)[0];
     if (cand) (cert = cand.value), (certSource = cand.source);
   }
   if (session.locked_cert && cert !== session.locked_cert) throw Object.assign(new Error("This session is bound to a different slab. Start a new session for another card."), { userFacing: true, noRetry: true });
@@ -120,7 +125,7 @@ export async function runAnalysis(sessionId: string) {
   // ---- 3. Official record
   let lookup: LookupResult | null = null;
   if (grader && cert) {
-    lookup = await cachedLookup(grader, cert);
+    lookup = await cachedLookup(grader, cert, lib);
     await q(`insert into verification_evidence (session_id,analysis_run,kind,data,provenance) values ($1,$2,'official_record',$3,$4)`, [sessionId, run, JSON.stringify(lookup.record), JSON.stringify(lookup.record.provenance)]);
     if (grader === "PSA" && env.psaToken) await recordCost(sessionId, session.user_id, "psa_api_call", 1);
   }
@@ -147,7 +152,7 @@ export async function runAnalysis(sessionId: string) {
     let result: ComparisonResult;
     if (prev) result = prev.result;
     else {
-      const raw: any = await vision.compare(await load(up), await load(ref.img), side === "front" ? holder.ocrText : undefined);
+      const raw: any = await vision.compare(await load(up), await load(ref.img), side === "front" ? holder.ocrText : undefined, geometry);
       await recordCost(sessionId, session.user_id, "vision_cpu_second", (raw.elapsedMs ?? 0) / 1000);
       const ov: Record<string, string> = {};
       for (const [k, v] of Object.entries<string | undefined>(raw.overlays ?? {})) if (v) ov[k] = await storeDerived(session, up, `overlay_${side}_${k}`, v, raw.toolVersion);
@@ -185,6 +190,7 @@ export async function runAnalysis(sessionId: string) {
 
   // ---- 7. Rules engine + report
   const input: EngineInput = {
+    library: lib, category: category.id,
     mode: session.mode, grader, certNumber: cert, certSource, certUserConfirmed: session.cert_confirmed,
     record: lookup?.record ?? null, labelOcrText: holder.ocrText,
     images: images.filter((i) => !i.role.startsWith("reference_") && i.role !== "tilt_video").map((i) => ({ id: i.id, role: i.role, quality: i.quality as QualityReport })),
@@ -197,7 +203,7 @@ export async function runAnalysis(sessionId: string) {
 
   await q(`insert into verification_reports (session_id,analysis_run,report,rules_version) values ($1,$2,$3,$4)`, [sessionId, run, JSON.stringify(report), out.rulesVersion]);
   for (const f of out.findings) await q(`insert into risk_findings (session_id,analysis_run,severity,pattern,data) values ($1,$2,$3,$4,$5)`, [sessionId, run, f.severity, f.pattern, JSON.stringify(f)]);
-  const title = (lookup?.record as OfficialCertRecord | undefined)?.description || (grader && cert ? `${GRADERS[grader].id} ${cert}` : "Untitled slab");
+  const title = (lookup?.record as OfficialCertRecord | undefined)?.description || (grader && cert ? `${grader} ${cert}` : "Untitled slab");
   await q(
     `update verification_sessions set status='completed', analysis_count=$2, overall_assessment=$3, grader=coalesce(grader,$4), cert_number=coalesce(cert_number,$5), cert_source=coalesce(cert_source,$6),
        locked_cert=coalesce(locked_cert,$5), title=$7, completed_at=now(), updated_at=now() where id=$1`,

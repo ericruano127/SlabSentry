@@ -8,9 +8,10 @@ import { LiveCamera } from "./LiveCamera";
 import { UpgradePrompt } from "./ui";
 
 type Img = { id: string; role: string; quality: { ok: boolean; issues: { issue: string; severity: string; guidance: string }[] } | null };
-type Session = { id: string; mode: string; grader: string | null; certNumber: string | null; certConfirmed: boolean; creditState: string; lockedCert: string | null; officialLookupUrl: string | null; images: (Img & { is_original: boolean })[]; references: { side: string; source: string }[] };
+type Session = { id: string; mode: string; category: string; grader: string | null; certNumber: string | null; certConfirmed: boolean; creditState: string; lockedCert: string | null; officialLookupUrl: string | null; images: (Img & { is_original: boolean })[]; references: { side: string; source: string }[] };
 
-const GRADERS = ["PSA", "CGC", "BGS", "SGC", "TAG", "AGS"];
+type LibCategory = { id: string; name: string; description: string; launchStatus: "supported" | "beta" | "planned"; subcategories: string[]; captureGuidance: { front: string; back: string; label: string; extras: { role: string; title: string; hint: string }[] } };
+type LibGrader = { id: string; name: string; categories: string[]; status: string };
 const SECURITY_TIPS: Record<string, string[]> = {
   PSA: ["Backlight: hold a phone flashlight behind the label and photograph the front — PSA documents an on/off LightHouse logo effect on newer labels.", "Older (pre-2017) labels don't have this feature; that's expected."],
   CGC: ["Tilt the slab slowly under one light so the holographic foil changes color; take 3–5 photos of the label.", "UV ink can't be checked with a phone camera."],
@@ -66,6 +67,8 @@ function Capture({ label, hint, role, multiple, onUpload, images, attestation, i
 export function ScanWizard() {
   const router = useRouter();
   const me = useApi<Me>("/api/me");
+  const library = useApi<{ version: string; categories: LibCategory[]; graders: LibGrader[] }>("/api/library");
+  const [categoryId, setCategoryId] = useState("sports_cards");
   const [session, setSession] = useState<Session | null>(null);
   const [step, setStep] = useState(0);
   const [err, setErr] = useState<any>(null);
@@ -85,12 +88,16 @@ export function ScanWizard() {
   }, []);
 
   const inHand = session?.mode !== "online_listing";
+  // Category data (capture guidance, graders) comes from the published reference library.
+  const cat = library.data?.categories.find((c) => c.id === (session?.category ?? categoryId));
+  const graderOptions = (library.data?.graders ?? []).filter((g) => !cat || g.categories.includes(cat.id));
+  const guide = cat?.captureGuidance;
   const images = session?.images.filter((i) => i.is_original) ?? [];
   const refresh = async () => session && setSession(await api<Session>(`/api/sessions/${session.id}`));
 
   async function start(mode: string) {
     setErr(null);
-    const { id } = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode } });
+    const { id } = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode, category: categoryId } });
     setSession(await api<Session>(`/api/sessions/${id}`));
     setStep(1);
   }
@@ -141,6 +148,21 @@ export function ScanWizard() {
       {err && (errBody?.error === "limit_reached" ? <UpgradePrompt reason={errBody.message} /> : <div className="banner bad" role="alert">{err.message}{errBody?.problems && <ul>{errBody.problems.flatMap((p: any) => p.issues.map((i: any) => <li key={p.role + i.issue}><strong>{p.role}:</strong> {i.guidance}</li>))}</ul>}</div>)}
 
       {step === 0 && (
+        <div className="stack">
+        <div className="card stack">
+          <h2>What are you checking?</h2>
+          <div className="row" role="radiogroup" aria-label="Item category">
+            {(library.data?.categories ?? []).map((c) => (
+              <button key={c.id} role="radio" aria-checked={categoryId === c.id} className={`btn ${categoryId === c.id ? "primary" : ""}`} onClick={() => setCategoryId(c.id)}>
+                {c.name}{c.launchStatus !== "supported" && <span className="small" style={{ opacity: 0.8 }}> · {c.launchStatus === "beta" ? "beta" : "limited"}</span>}
+              </button>
+            ))}
+          </div>
+          {cat && cat.launchStatus !== "supported" && (
+            <div className="banner warn small">Limited checks for {cat.name.toLowerCase()}: our reference library for these graders is still being researched, so most holder checks will be inconclusive. Certificate links, photo-quality checks and reference-image comparison still work.</div>
+          )}
+          {cat?.subcategories.length ? <p className="small muted">Includes: {cat.subcategories.join(", ")}</p> : null}
+        </div>
         <div className="grid grid-2">
           <button className="card btn" style={{ display: "block", textAlign: "left", height: "auto" }} onClick={() => start("in_hand").catch(setErr)}>
             <h2>In hand</h2><p className="muted">You have the slab. Use your camera for front, back, label and security captures.</p>
@@ -149,14 +171,15 @@ export function ScanWizard() {
             <h2>Online listing</h2><p className="muted">Screen a seller's photos. We can't confirm the seller has the slab or that photos are live.</p>
           </button>
         </div>
+        </div>
       )}
 
       {step === 1 && session && (
         <div className="stack">
           {!inHand && <div className="banner">Online listing mode: upload the seller's photos. Results describe the photos only.</div>}
           <div className="grid grid-2">
-            <Capture label="Front of slab" hint="Whole slab, all four edges visible, straight on, no glare." role="front" highlight={focusRole === "front"} onUpload={upload} images={images} inHand={inHand} />
-            <Capture label="Back of slab" hint="Flip the slab over. Same framing as the front." role="back" highlight={focusRole === "back"} onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Front" hint={guide?.front ?? "Whole holder, all four edges visible, straight on, no glare."} role="front" highlight={focusRole === "front"} onUpload={upload} images={images} inHand={inHand} />
+            <Capture label="Back" hint={guide?.back ?? "Flip it over. Same framing as the front."} role="back" highlight={focusRole === "back"} onUpload={upload} images={images} inHand={inHand} />
           </div>
           <div className="row spread"><span className="small muted">Photos and retakes never use a credit.</span><button className="btn primary" disabled={!images.some((i) => i.role === "front")} onClick={() => setStep(2)}>Continue</button></div>
         </div>
@@ -164,7 +187,7 @@ export function ScanWizard() {
 
       {step === 2 && session && (
         <div className="stack">
-          <Capture label="Certification label close-up" hint="Fill the frame with the label. Make sure the number and QR/barcode are sharp." role="label_closeup" highlight={focusRole === "label_closeup"} onUpload={upload} images={images} inHand={inHand} />
+          <Capture label="Certification label close-up" hint={guide?.label ?? "Fill the frame with the label. Make sure the number and QR/barcode are sharp."} role="label_closeup" highlight={focusRole === "label_closeup"} onUpload={upload} images={images} inHand={inHand} />
           <div className="row spread"><button className="btn" onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={busy} onClick={async () => { await readLabel(); setStep(3); }}>{busy ? "Reading label…" : "Read label"}</button></div>
         </div>
       )}
@@ -175,7 +198,7 @@ export function ScanWizard() {
           {extract?.graders?.[0] && <p className="small muted">Detected: {extract.graders[0].grader} ({extract.graders[0].reasons.join("; ")})</p>}
           {extract && !extract.candidates.length && <p className="small muted">We couldn't read a number automatically — please type it from the label.</p>}
           <div className="grid grid-2">
-            <div className="field"><label htmlFor="g">Grading company</label><select id="g" value={grader} onChange={(e) => setGrader(e.target.value)}><option value="">Select…</option>{GRADERS.map((g) => <option key={g}>{g}</option>)}</select></div>
+            <div className="field"><label htmlFor="g">Grading company</label><select id="g" value={grader} onChange={(e) => setGrader(e.target.value)}><option value="">Select…</option>{graderOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
             <div className="field"><label htmlFor="c">Certification number</label><input id="c" inputMode="text" value={cert} onChange={(e) => setCert(e.target.value.toUpperCase())} disabled={!!session.lockedCert} /></div>
           </div>
           {extract?.candidates?.length > 1 && <p className="small">Other readings: {extract.candidates.slice(1).map((c: any) => <button key={c.value} className="pill" onClick={() => setCert(c.value)}>{c.value} ({c.source})</button>)}</p>}
@@ -193,6 +216,9 @@ export function ScanWizard() {
             {grader === "PSA" && <Capture label="Backlit label" hint="Same framing as your label close-up, with a light behind the label." role="backlit" highlight={focusRole === "backlit"} onUpload={upload} images={images} inHand={inHand} />}
             <Capture label="Holder edges & seams" hint="Close-ups of each side of the holder." role="edge" highlight={focusRole === "edge"} multiple onUpload={upload} images={images} inHand={inHand} />
             <Capture label="Security close-up" hint="Hologram or fine print, as close as your camera can focus." role="security_closeup" highlight={focusRole === "security_closeup"} multiple onUpload={upload} images={images} inHand={inHand} />
+            {guide?.extras.filter((x) => x.role !== "edge").map((x) => (
+              <Capture key={x.role + x.title} label={x.title} hint={x.hint} role={x.role} multiple highlight={focusRole === x.role} onUpload={upload} images={images} inHand={inHand} />
+            ))}
           </div>
           <div className="row spread"><button className="btn" onClick={() => setStep(3)}>Back</button><button className="btn primary" onClick={() => setStep(5)}>Continue</button></div>
         </div>

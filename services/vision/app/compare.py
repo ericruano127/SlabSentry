@@ -39,9 +39,8 @@ def _clahe(g):
     return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(g)
 
 
-def _card_or_none(img):
-    q = geometry.find_card(img)
-    return q
+def _card_or_none(img, rng=geometry._DEFAULT):
+    return geometry.find_card(img, rng)
 
 
 def _mask_from_quad(shape, pts, shrink=0.04):
@@ -132,7 +131,7 @@ def _local_differences(a_bgr, b_bgr, valid):
     return scores, flagged, comparable
 
 
-def compare(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[str] | None = None) -> dict:
+def compare(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[str] | None = None, item_rng=geometry._DEFAULT, holder_rng=geometry._DEFAULT) -> dict:
     out = {
         "toolVersion": TOOL_VERSION,
         "designMatch": {"status": "inconclusive", "inliers": 0, "inlierRatio": 0.0},
@@ -143,7 +142,7 @@ def compare(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[s
         "diagnostics": {},
     }
     hf = hamming(phash(upload), phash(reference))
-    qu, qr = _card_or_none(upload), _card_or_none(reference)
+    qu, qr = _card_or_none(upload, item_rng), _card_or_none(reference, item_rng)
     out["diagnostics"]["cardDetected"] = {"upload": qu is not None, "reference": qr is not None}
 
     mu = _mask_from_quad(upload.shape, qu.pts) if qu is not None else None
@@ -166,7 +165,7 @@ def compare(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[s
         hc = hamming(phash(cu), phash(cr))
     out["photoReuse"] = {"hammingFull": hf, "hammingCard": hc, "nearIdentical": hf <= PHOTO_REUSE_HAMMING}
 
-    out["labelComparison"] = label.compare_labels(upload, reference, upload_label_text)
+    out["labelComparison"] = label.compare_labels(upload, reference, upload_label_text, holder_rng)
     if dm["status"] != "consistent" or qr is None:
         return out
 

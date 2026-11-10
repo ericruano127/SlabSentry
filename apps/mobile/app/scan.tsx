@@ -28,6 +28,16 @@ export default function Scan() {
   const [shots, setShots] = useState<Record<string, { uri: string; quality: any }[]>>({});
   const [busy, setBusy] = useState(false);
   const [grader, setGrader] = useState("");
+  // Categories, graders and capture guidance come from the published reference library.
+  const [library, setLibrary] = useState<{ categories: any[]; graders: any[] } | null>(null);
+  const [categoryId, setCategoryId] = useState("sports_cards");
+  useEffect(() => { api("/api/library").then(setLibrary).catch(() => {}); }, []);
+  const cat = library?.categories.find((c) => c.id === categoryId);
+  const graderOptions = (library?.graders ?? []).filter((g) => g.categories.includes(categoryId));
+  const steps: Step[] = STEPS.map((st) =>
+    st.role === "front" && cat ? { ...st, title: "Front", hint: cat.captureGuidance.front }
+      : st.role === "back" && cat ? { ...st, title: "Back", hint: cat.captureGuidance.back }
+      : st.role === "label_closeup" && cat ? { ...st, hint: cat.captureGuidance.label } : st);
   const [cert, setCert] = useState("");
   const [phase, setPhase] = useState<"capture" | "confirm" | "analyze">("capture");
 
@@ -38,7 +48,7 @@ export default function Scan() {
   }, [params.session, params.role]);
 
   async function start(m: "in_hand" | "online_listing") {
-    const r = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode: m } });
+    const r = await api<{ id: string }>("/api/sessions", { method: "POST", json: { mode: m, category: categoryId } });
     setSessionId(r.id);
     setMode(m);
   }
@@ -104,6 +114,15 @@ export default function Scan() {
   if (!mode) {
     return (
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <T size={18} bold>What are you checking?</T>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {(library?.categories ?? []).map((c) => (
+            <View key={c.id} style={{ minWidth: "47%", flexGrow: 1 }}>
+              <Button title={`${c.name}${c.launchStatus !== "supported" ? " (limited)" : ""}`} primary={categoryId === c.id} onPress={() => setCategoryId(c.id)} />
+            </View>
+          ))}
+        </View>
+        {cat && cat.launchStatus !== "supported" && <T muted size={13}>Limited checks: the reference library for these graders is still being researched, so most holder checks will be inconclusive.</T>}
         <Card><T size={18} bold>In hand</T><T muted>You have the slab. Use the camera for guided captures.</T><Button primary title="Start in-hand scan" onPress={() => start("in_hand")} /></Card>
         <Card><T size={18} bold>Online listing</T><T muted>Screen a seller's photos. We can't confirm the seller has the slab or that photos are live.</T><Button title="Screen listing photos" onPress={() => start("online_listing")} /></Card>
       </ScrollView>
@@ -116,17 +135,20 @@ export default function Scan() {
         <Card style={{ gap: 10 }}>
           <T size={18} bold>Confirm certification</T>
           <T muted size={13}>Check each digit against the label (0/O, 1/7, 5/S are easy to confuse).</T>
-          <TextInput style={input} placeholder="Grader (PSA, CGC, BGS, SGC, TAG, AGS)" placeholderTextColor={t.muted} autoCapitalize="characters" value={grader} onChangeText={setGrader} accessibilityLabel="Grading company" />
+          <T size={14} bold>Grading company</T>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {graderOptions.map((g) => <View key={g.id}><Button title={g.name} primary={grader === g.id} onPress={() => setGrader(g.id)} /></View>)}
+          </View>
           <TextInput style={input} placeholder="Certification number" placeholderTextColor={t.muted} autoCapitalize="characters" value={cert} onChangeText={setCert} accessibilityLabel="Certification number" />
         </Card>
         <T muted size={13}>Uses 1 verification, charged only when your report is delivered. Retakes in this session are free.</T>
-        <Button primary title="Analyze slab" onPress={analyze} busy={busy} disabled={!["PSA", "CGC", "BGS", "SGC", "TAG", "AGS"].includes(grader.toUpperCase())} />
+        <Button primary title="Analyze slab" onPress={analyze} busy={busy} disabled={!graderOptions.some((g) => g.id === grader)} />
         <Button title="Back to photos" onPress={() => setPhase("capture")} />
       </ScrollView>
     );
   }
 
-  const step = STEPS[i];
+  const step = steps[i];
   const mine = shots[step.role] ?? [];
   const last = mine[mine.length - 1];
   return (

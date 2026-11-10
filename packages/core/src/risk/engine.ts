@@ -1,5 +1,6 @@
-import { GRADERS } from "../graders/registry";
-import { generationsFor, SECURITY_FEATURES, type HolderGeneration } from "../holders/library";
+import { resolveEra, type EraResolution } from "../library/era";
+import { defaultLibrary, type CompiledLibrary } from "../library/runtime";
+import type { Generation as HolderGeneration } from "../library/schema";
 import { distinctImages, edgeReviewRules, labelRules, physicalMatchRules, retakeRequests, tiltVideoRules } from "./phase2";
 import type {
   ComparisonResult,
@@ -41,6 +42,10 @@ export interface EngineInput {
   reverseImage?: { status: "not_configured" | "not_entitled" | "done"; samePhotoUrls: string[]; similarUrls: string[] };
   edgeReviews?: EdgeReviewResult[];
   tiltVideo?: TiltVideoResult;
+  /** Published reference library (data-driven). Defaults to the built-in seed (tests). */
+  library?: CompiledLibrary;
+  /** Item category from the library (e.g. sports_cards, tcg, sealed_video_games). */
+  category?: string | null;
   now?: string;
 }
 
@@ -51,6 +56,9 @@ export interface EngineOutput {
   assessment: OverallAssessment;
   nextActions: string[];
   holderGeneration: { candidates: HolderGeneration[]; note: string } | null;
+  era: EraResolution | null;
+  category: string;
+  library: { version: string; sha256: string | null };
   physicalMatch: PhysicalMatch[];
   retakeRequests: RetakeRequest[];
   duplicates: { id: string; role: string; duplicateOf: string }[];
@@ -70,6 +78,9 @@ export function runEngine(input: EngineInput): EngineOutput {
   const obs: Observation[] = [];
   const findings: RiskFinding[] = [];
   const add = (o: Observation) => (obs.push(o), o.id);
+  const lib = input.library ?? defaultLibrary();
+  const category = lib.category(input.category);
+  const graderName = (id: string) => lib.grader(id)?.name ?? id;
   const physical: PhysicalMatch[] = [];
   // Near-identical photos never add evidence (e.g. the same shot uploaded as front and back).
   const { kept: distinct, duplicates } = distinctImages(input.images);
@@ -85,8 +96,8 @@ export function runEngine(input: EngineInput): EngineOutput {
       title: "Official record not retrieved automatically",
       status: "inconclusive",
       basis: "unknown",
-      detail: `${GRADERS[input.grader].name} does not offer an integration we can use${input.record?.provenance.note ? ` (${input.record.provenance.note})` : ""}. Open the official lookup to confirm the record.`,
-      provenance: prov("official_link", RULES_VERSION, { url: input.record?.verificationUrl }),
+      detail: `${graderName(input.grader)} does not offer an integration we can use${input.record?.provenance.note ? ` (${input.record.provenance.note})` : ""}. Open the official lookup to confirm the record.`,
+      provenance: prov("official_link", RULES_VERSION, { url: input.record?.verificationUrl ?? undefined }),
     });
   } else if (input.record.found === false) {
     const id = add({ id: "cert.not_found", category: "certification", title: "No official record found", status: "potential_discrepancy", basis: "fact", detail: `The grader's service returned no record for cert ${input.certNumber}.`, provenance: input.record.provenance });
@@ -157,8 +168,8 @@ export function runEngine(input: EngineInput): EngineOutput {
     if (r.designMatch.status === "potential_discrepancy") {
       findings.push({ id: `f.${c.side}.design`, severity: c.referenceSource === "official_api" ? "high" : "medium", pattern: c.side === "back" ? "front_back_inconsistent" : "cert_cloning_suspected", summary: `${cap(c.side)} does not appear to be the card shown in the reference`, explanation: "A valid certification number paired with a different card is the signature of certificate cloning.", observationIds: [dId], legitimateExplanations: ["Reference image belongs to another cert (check source)", "Severe glare or partial capture"] });
     }
-    physical.push(physicalMatchRules(c, { design: dId, centering: cId, local: lId }, add, findings, prov));
-    labelRules(c, add, findings, prov);
+    if (category.checks.physicalFingerprint) physical.push(physicalMatchRules(c, { design: dId, centering: cId, local: lId }, add, findings, prov));
+    if (category.checks.labelComparison) labelRules(c, add, findings, prov);
     if (r.photoReuse.nearIdentical && input.mode === "in_hand") {
       const id = add({ id: `reuse.${c.side}.screenshot`, category: "image_reuse", title: `${cap(c.side)}: capture nearly identical to reference`, status: "potential_discrepancy", basis: "inference", detail: "Your capture is pixel-similar to the reference image itself, which usually means a screenshot was photographed rather than the slab.", metrics: { hamming: r.photoReuse.hammingFull }, provenance: prov("computed", r.toolVersion) });
       findings.push({ id: `f.${c.side}.screenshot`, severity: "medium", pattern: "screenshot_of_reference", summary: "Capture appears to be the reference photo", explanation: "In-hand mode expects a fresh photo of the physical slab.", observationIds: [id], legitimateExplanations: ["Wrong file selected"] });
@@ -171,12 +182,50 @@ export function runEngine(input: EngineInput): EngineOutput {
 
   // ---------- 5/6/7. Holder ----------
   let holderGeneration: EngineOutput["holderGeneration"] = null;
+  let era: EraResolution | null = null;
   if (input.grader) {
-    const gens = generationsFor(input.grader);
-    holderGeneration = { candidates: gens, note: gens.length > 1 ? "Generation not determined from photos; checks specific to newer holders are marked not applicable unless their presence is observed." : gens[0]?.status === "research_needed" ? "Holder design documentation for this grader is still being researched." : "" };
+    // Era = when the slab was graded/encapsulated (current holder). The item's year is never used.
+    era = resolveEra(lib, input.grader, category.id, {
+      gradingDate: input.record?.found ? input.record.gradingDate ?? null : null,
+      labelType: input.record?.found ? input.record.labelType ?? null : null,
+      certNumber: input.certNumber,
+      observed: {
+        codes: input.holder?.codes ?? [],
+        ocrText: input.labelOcrText,
+        tiltChange: input.holder?.tilt?.status === "consistent",
+        backlitChange: input.holder?.backlit?.status === "consistent",
+      },
+    });
+    const official = ["official_grading_date", "official_label_type", "verified_cert_range"].includes(era.basis);
+    const eraId = add({
+      id: "holder.era", category: "holder", title: "Grading era / holder generation",
+      status: era.mismatch ? "potential_discrepancy" : era.generation && official ? "consistent" : "inconclusive",
+      basis: official ? "fact" : era.generation ? "inference" : "unknown",
+      detail: `${era.generation ? `${era.generation.name}. ` : ""}${era.explanation}${era.mismatch ? ` ${era.mismatch.explanation}` : ""}`,
+      metrics: { basis: era.basis, confidence: era.confidence, generation: era.generation?.id ?? null, gradedFrom: era.gradingPeriod?.from ?? null, gradedTo: era.gradingPeriod?.to ?? null },
+      provenance: prov(official ? "official_api" : "computed", RULES_VERSION, { note: `library ${lib.meta.version}` }),
+    });
+    if (era.mismatch)
+      findings.push({
+        id: "f.era_mismatch", severity: "medium", pattern: "era_mismatch",
+        summary: "Holder features don't match the grading era on record",
+        explanation: `${era.mismatch.explanation} A label or holder from a different era than the grader's record is compatible with a replaced label or a counterfeit holder.`,
+        observationIds: [eraId],
+        legitimateExplanations: ["The slab was reholdered after the record was captured", "Lighting change mistaken for a label effect", "Grader record not yet updated"],
+      });
+    const gens = era.generation ? [era.generation] : era.candidates;
+    holderGeneration = { candidates: gens, note: era.generation ? `${era.inferred ? "Inferred" : "Determined"} from ${era.basis.replace(/_/g, " ")} (confidence ${era.confidence}).` : era.explanation };
+    // Features of other generations are explicitly "not applicable" once the era is known.
+    if (era.generation)
+      for (const fid of new Set(era.candidates.filter((g) => g !== era!.generation).flatMap((g) => g.features)))
+        if (!era.generation.features.includes(fid)) {
+          const f = lib.feature(fid);
+          if (f) add({ id: `sec.${fid}`, category: "security_feature", title: f.name, status: "not_applicable", basis: "inference", detail: `Not part of the ${era.generation.name} design.`, provenance: prov("computed") });
+        }
     const featureIds = new Set(gens.flatMap((g) => g.features));
     for (const fid of featureIds) {
-      const f = SECURITY_FEATURES[fid];
+      const f = lib.feature(fid);
+      if (!f) continue;
       const inAllGens = gens.every((g) => g.features.includes(fid));
       let status: Observation["status"] = "inconclusive";
       let detail = f.description;
@@ -227,7 +276,7 @@ export function runEngine(input: EngineInput): EngineOutput {
   const assessment = overall(findings, evidenceQuality);
   if (duplicates.length) evidenceQuality.reasons.push(`${duplicates.length} photo(s) were near-duplicates of another photo and were not counted.`);
   const retakes = retakeRequests({ grader: input.grader, obs, findings, roles: new Set(input.images.map((i) => i.role)), hasReference, comparisons: input.comparisons, mode: input.mode, duplicates });
-  return { observations: obs, findings, evidenceQuality, assessment, nextActions: nextActions(input, findings, evidenceQuality, hasReference), holderGeneration, physicalMatch: physical, retakeRequests: retakes, duplicates, rulesVersion: RULES_VERSION };
+  return { observations: obs, findings, evidenceQuality, assessment, nextActions: nextActions(input, findings, evidenceQuality, hasReference), holderGeneration, era, category: category.id, library: lib.meta, physicalMatch: physical, retakeRequests: retakes, duplicates, rulesVersion: RULES_VERSION };
 }
 
 function assessEvidence(input: EngineInput, hasReference: boolean): EvidenceQuality {
@@ -258,7 +307,7 @@ function overall(findings: RiskFinding[], eq: EvidenceQuality): OverallAssessmen
 
 function nextActions(input: EngineInput, findings: RiskFinding[], eq: EvidenceQuality, hasReference: boolean): string[] {
   const a: string[] = [];
-  const g = input.grader ? GRADERS[input.grader] : null;
+  const g = input.grader ? (input.library ?? defaultLibrary()).grader(input.grader) ?? null : null;
   if (findings.some((f) => f.pattern === "cert_not_found")) a.push("Re-check the cert number digit-by-digit against the label, then look it up on the grader's official site.");
   if (g && !input.record?.found) a.push(`Open the official ${g.id} lookup and compare the record (card, grade, images) with the slab.`);
   if (!hasReference) a.push(g?.officialImagery.status === "api" ? "Official images were unavailable for this cert; if the grader's page shows images, upload one as a reference (it will be labeled user-supplied)." : "If the grader's cert page shows images, upload one as a reference image (it will be labeled user-supplied).");

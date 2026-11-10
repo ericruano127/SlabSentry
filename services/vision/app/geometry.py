@@ -65,15 +65,38 @@ def find_quads(img: np.ndarray, min_area_frac=0.05) -> list[Quad]:
     return uniq
 
 
-def find_slab(img) -> Quad | None:
-    qs = [q for q in find_quads(img, 0.15) if SLAB_ASPECT_RANGE[0] <= q.aspect <= SLAB_ASPECT_RANGE[1]]
+_DEFAULT = object()
+
+
+def _shape_ok(q: "Quad", rng) -> bool:
+    return rng is None or rng[0] <= q.aspect <= rng[1]
+
+
+def find_slab(img, aspect_range=_DEFAULT) -> Quad | None:
+    """Largest holder-shaped quad. aspect_range None = any shape (categories without a known holder shape)."""
+    rng = SLAB_ASPECT_RANGE if aspect_range is _DEFAULT else aspect_range
+    qs = [q for q in find_quads(img, 0.15) if _shape_ok(q, rng)]
     return qs[0] if qs else None
 
 
-def find_card(img) -> Quad | None:
-    """Largest card-shaped quad (inside a slab, or a raw card image)."""
-    qs = [q for q in find_quads(img, 0.08) if CARD_ASPECT_RANGE[0] <= q.aspect <= CARD_ASPECT_RANGE[1]]
+def find_card(img, aspect_range=_DEFAULT) -> Quad | None:
+    """Largest item-shaped quad inside a holder (or a raw item image). None = any shape; for unknown
+    shapes the outer holder quad is skipped when a smaller nested quad exists."""
+    rng = CARD_ASPECT_RANGE if aspect_range is _DEFAULT else aspect_range
+    qs = [q for q in find_quads(img, 0.08) if _shape_ok(q, rng)]
+    if rng is None and len(qs) > 1:
+        return qs[1]  # largest is usually the holder itself; the next is the item window
     return qs[0] if qs else None
+
+
+def parse_geometry(raw: str | None):
+    """Request field → (item_range, holder_range). Missing field keeps card defaults."""
+    if not raw:
+        return _DEFAULT, _DEFAULT
+    import json
+    g = json.loads(raw)
+    conv = lambda v: tuple(v) if v else None
+    return conv(g.get("itemAspect")), conv(g.get("holderAspect"))
 
 
 def warp(img, quad_pts, out_w: int, out_h: int):

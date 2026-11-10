@@ -20,7 +20,7 @@ GUIDANCE = {
 ROLE_NEEDS_FULL_SLAB = {"front", "back", "reference_front", "reference_back"}
 
 
-def assess(img: np.ndarray, role: str) -> dict:
+def assess(img: np.ndarray, role: str, item_rng=geometry._DEFAULT, holder_rng=geometry._DEFAULT) -> dict:
     h, w = img.shape[:2]
     g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Sharpness normalized to a 1000px long side so scores are resolution independent.
@@ -55,7 +55,7 @@ def assess(img: np.ndarray, role: str) -> dict:
 
     metrics = {"phash": format(phash(img), "016x"), "sharpness": round(sharp, 1), "meanLuma": round(mean, 1), "glareFrac": round(glare, 4), "width": w, "height": h}
     if role in ROLE_NEEDS_FULL_SLAB and not role.startswith("reference"):
-        q = geometry.find_slab(img) or geometry.find_card(img)
+        q = geometry.find_slab(img, holder_rng) or geometry.find_card(img, item_rng)
         metrics["subjectDetected"] = q is not None
         if q is not None:
             metrics["subjectAreaFrac"] = round(q.area_frac, 3)

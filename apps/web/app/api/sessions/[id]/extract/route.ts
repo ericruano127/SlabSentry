@@ -1,4 +1,5 @@
 import { detectGrader, extractCertCandidates } from "@slabguard/core";
+import { loadLibrary } from "@/lib/library";
 import { requireUser } from "@/lib/auth";
 import { handle, HttpError, json } from "@/lib/http";
 import { rateLimit } from "@/lib/ratelimit";
@@ -19,7 +20,8 @@ export const POST = handle(async (req: Request, ctx: { params: Promise<{ id: str
   });
   const codes = r.codes.map((c) => c.data);
   const ocrText = r.ocr.map((o) => o.text);
-  const graders = detectGrader({ codes, ocrText });
-  const candidates = extractCertCandidates(graders[0]?.grader ?? null, { codes, ocrText });
+  const lib = await loadLibrary();
+  const graders = detectGrader({ codes, ocrText }, lib, s.category);
+  const candidates = extractCertCandidates(graders[0]?.grader ?? null, { codes, ocrText }, lib, s.category);
   return json({ graders, candidates, codes, ocrText });
 });

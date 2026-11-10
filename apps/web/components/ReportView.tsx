@@ -32,6 +32,14 @@ const PM: Record<string, { label: string; tone: string }> = {
   not_established: { label: "Physical-copy match not established", tone: "warn" },
   conflicting: { label: "Physical characteristics conflict", tone: "bad" },
 };
+const ERA_BASIS: Record<string, string> = {
+  official_grading_date: "Grader's record: grading date",
+  official_label_type: "Grader's record: label type",
+  verified_cert_range: "Verified cert-number data",
+  visual_inference: "Inferred from photos",
+  only_known_generation: "Only documented generation",
+  unknown: "Unknown",
+};
 const ROLE_LABEL: Record<string, string> = { front: "Front photo", back: "Back photo", label_closeup: "Label close-up", backlit: "Backlit label", tilt_video: "Tilt video", edge: "Edge close-ups", reference_front: "Reference image" };
 
 function Narrative({ report, sessionId, canNarrate }: { report: any; sessionId?: string; canNarrate?: boolean }) {
@@ -163,6 +171,15 @@ export function ReportView({ report, privateImages = true, history, sessionId, c
         e.holderGeneration && (
           <div className="small" style={{ marginBottom: 8 }}>
             <strong>Holder family:</strong> {e.holderGeneration.candidates.map((c: any) => c.name).join(" or ") || "Unknown"}
+            {e.era && (
+              <div style={{ marginTop: 4 }}>
+                <strong>Grading era:</strong>{" "}
+                {e.era.generation ? e.era.generation.name : "not determined"}
+                {e.era.gradingPeriod && (e.era.gradingPeriod.from || e.era.gradingPeriod.to) ? ` (graded ${e.era.gradingPeriod.from ?? "…"} – ${e.era.gradingPeriod.to ?? "present"})` : ""}
+                {" · "}<Pill tone={e.era.mismatch ? "bad" : e.era.confidence === "high" ? "ok" : e.era.confidence === "none" ? "" : "warn"}>{ERA_BASIS[e.era.basis] ?? e.era.basis}{e.era.confidence !== "none" ? ` · ${e.era.confidence} confidence` : ""}</Pill>
+                <div className="muted">Based on when the slab was graded — never the item's own year.{e.era.inferred ? " Inferred from visible features: treat as an estimate." : ""}</div>
+              </div>
+            )}
             {e.holderGeneration.note && <div className="muted">{e.holderGeneration.note}</div>}
           </div>
         ))}

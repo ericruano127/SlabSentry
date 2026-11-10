@@ -21,8 +21,8 @@ TILT_HOLO_FRAC = 0.01
 BACKLIT_DELTA = 18.0
 
 
-def _label_crop(img):
-    q = geometry.find_slab(img)
+def _label_crop(img, rng=geometry._DEFAULT):
+    q = geometry.find_slab(img, rng)
     if q is None:
         return None, None
     slab, _ = geometry.warp(img, q.pts, SLAB_W, SLAB_H)
@@ -30,9 +30,9 @@ def _label_crop(img):
 
 
 def inspect(front: np.ndarray, label_closeup: np.ndarray | None = None, tilt_frames: list[np.ndarray] | None = None,
-            backlit_pair: tuple[np.ndarray, np.ndarray] | None = None) -> dict:
+            backlit_pair: tuple[np.ndarray, np.ndarray] | None = None, holder_rng=geometry._DEFAULT) -> dict:
     out: dict = {"toolVersion": TOOL_VERSION, "codes": [], "ocrText": [], "ocrAvailable": ocr.available()}
-    q = geometry.find_slab(front)
+    q = geometry.find_slab(front, holder_rng)
     out["slabDetected"] = q is not None
     if q is not None:
         touch = q.touches_border(front.shape)
@@ -50,7 +50,7 @@ def inspect(front: np.ndarray, label_closeup: np.ndarray | None = None, tilt_fra
         out["edgesVisible"] = {"top": False, "bottom": False, "left": False, "right": False}
         out["edgeStraightness"] = {"maxDeviationPct": 0.0, "status": "not_visible"}
 
-    sources = [s for s in (label_closeup, _label_crop(front)[0], front) if s is not None]
+    sources = [s for s in (label_closeup, _label_crop(front, holder_rng)[0], front) if s is not None]
     codes: dict[str, str] = {}
     for s in sources:
         for c in decode_codes(s):
@@ -59,7 +59,7 @@ def inspect(front: np.ndarray, label_closeup: np.ndarray | None = None, tilt_fra
             break
     out["codes"] = [{"type": t, "data": d} for d, t in codes.items()]
 
-    text_src = label_closeup if label_closeup is not None else (_label_crop(front)[0] if q is not None else front)
+    text_src = label_closeup if label_closeup is not None else (_label_crop(front, holder_rng)[0] if q is not None else front)
     out["ocrText"] = [r["text"] for r in ocr.read_text(text_src)] if text_src is not None else []
 
     if tilt_frames and len(tilt_frames) >= 2:

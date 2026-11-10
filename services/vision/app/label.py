@@ -15,8 +15,8 @@ from .holder import SLAB_H, SLAB_W, LABEL_FRAC
 TOKEN = re.compile(r"[A-Z0-9]+")
 
 
-def _label(img):
-    q = geometry.find_slab(img)
+def _label(img, rng=geometry._DEFAULT):
+    q = geometry.find_slab(img, rng)
     if q is None:
         return None
     slab, _ = geometry.warp(img, q.pts, SLAB_W, SLAB_H)
@@ -27,15 +27,15 @@ def _tokens(lines: list[str]) -> set[str]:
     return {t for line in lines for t in TOKEN.findall(line.upper().replace(" ", " ")) if len(t) >= 2}
 
 
-def compare_labels(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[str] | None = None) -> dict:
-    lr = _label(reference)
+def compare_labels(upload: np.ndarray, reference: np.ndarray, upload_label_text: list[str] | None = None, holder_rng=geometry._DEFAULT) -> dict:
+    lr = _label(reference, holder_rng)
     if lr is None:
         return {"status": "not_applicable", "note": "reference image does not show the slab label"}
     if not ocr.available():
         return {"status": "inconclusive", "note": "OCR unavailable"}
     ref_text = [r["text"] for r in ocr.read_text(lr)]
     if upload_label_text is None:
-        lu = _label(upload)
+        lu = _label(upload, holder_rng)
         upload_label_text = [r["text"] for r in ocr.read_text(lu)] if lu is not None else []
     if not ref_text or not upload_label_text:
         return {"status": "inconclusive", "note": "label text not readable in both images", "referenceText": ref_text, "uploadText": upload_label_text}

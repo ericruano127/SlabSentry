@@ -19,6 +19,10 @@ The same statuses live in code (`packages/core/src/holders/library.ts`, `graders
 - PSA cert lookups are cached for 24h per cert to respect the 100/day free quota and protect margins.
 - Holder age is never inferred from cert number alone; absence of a modern feature is not a discrepancy unless every candidate generation documents it.
 
+## Era data (Phase B)
+- PSA public cert pages show **Label Type** (values seen: "PSA Fugitive Ink Technology", "Hologram") and reverse barcode; **no grading date was found** ([example](https://www.psacard.com/Cert/24381749)). Era therefore comes from label type or visual inference until a grader exposes dates.
+- Non-card graders (WATA, VGA, CBCS, AFA): official lookup URLs and data access not yet confirmed — stored with `lookupBaseUrl: null`.
+
 ## Open research items
 1. PSA `GetImagesByCertNumber` response schema (code accepts only `{ImageURL, IsFrontImage}` HTTPS entries).
 2. CGC: official deep-link format; whether post-encapsulation photos can be accessed under permitted terms.

@@ -127,7 +127,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 6. Repo/deploy hygiene: CI dependency audit, Dependabot config, CODEOWNERS, `SECURITY.md`, branch-protection + 2FA checklist, incident-response plan (incl. breach-notification steps).
 7. Policy/disclosure text drafts, every block marked **LEGAL REVIEW REQUIRED**.
 
-**Phase B — Data-driven reference library + era-aware verification**
+**Phase B — Data-driven reference library + era-aware verification** ✅ done (2026-11-10) — see `docs/PHASE_B.md`
 1. DB-backed library: categories → graders → label/case generations (grading-date ranges) → expected features, with draft → published versions, content hash, audit log, admin editor. Engine and vision read the published version; reports record it.
 2. Category dimension. Initial records for sports cards and TCG (PSA, CGC, BGS, SGC, TAG, AGS), plus research-needed stubs for sealed games (WATA, VGA, CGC), comics (CGC, CBCS), figures (AFA/VGA and others). Category-specific geometry and capture guidance come from data.
 3. Grading-date resolution: from the official lookup when the grader provides it; otherwise visual generation inference, explicitly labeled "inferred", with lower confidence. Current slab governs (reholders). Item year is never used.

@@ -1,6 +1,6 @@
-import { GRADERS, officialLookupUrl } from "../graders/registry";
+import { officialLookupUrl } from "../graders/registry";
+import { defaultLibrary } from "../library/runtime";
 import type { EngineInput, EngineOutput } from "../risk/engine";
-import { HOLDER_LIBRARY_VERSION } from "../holders/library";
 import type { GraderId, OfficialCertRecord, OverallAssessment, VerificationMode } from "../types";
 
 export const ASSESSMENT_LABELS: Record<OverallAssessment, { title: string; tone: "ok" | "warn" | "bad" | "muted" }> = {
@@ -36,6 +36,8 @@ export interface VerificationReport {
   /** Deterministic plain-language interpretation of the evidence layers. */
   interpretation: string[];
   holderLibraryVersion: string;
+  library: { version: string; sha256: string | null };
+  category: string;
   /** Optional AI-written explanation; never changes findings or assessment. */
   narrative?: { text: string; source: "ai" | "template"; model?: string; generatedAt: string; analysisRun?: number };
   disclaimer: string;
@@ -67,20 +69,22 @@ export function buildReport(sessionId: string, input: EngineInput, out: EngineOu
     mode: input.mode,
     identification: {
       grader: input.grader,
-      graderName: input.grader ? GRADERS[input.grader].name : null,
+      graderName: input.grader ? (input.library ?? defaultLibrary()).grader(input.grader)?.name ?? input.grader : null,
       certNumber: input.certNumber,
       record: r?.found ? { year: r.year, brand: r.brand, subject: r.subject, cardNumber: r.cardNumber, variety: r.variety, grade: r.grade, description: r.description } : null,
     },
     official: {
       recordStatus: r?.found === true ? "found" : r?.found === false ? "not_found" : "not_checked",
-      lookupUrl: input.grader && input.certNumber ? officialLookupUrl(input.grader, input.certNumber) : null,
+      lookupUrl: input.grader && input.certNumber ? officialLookupUrl(input.grader, input.certNumber, input.library ?? defaultLibrary()) : null,
       imageAvailability: input.comparisons.some((c) => c.referenceSource === "official_api") ? "official_api" : input.comparisons.length ? "user_supplied" : "unavailable",
       source: r?.provenance.url ?? null,
     },
     engine: out,
     assessmentLabel: ASSESSMENT_LABELS[out.assessment].title,
     interpretation: interpret(input, out),
-    holderLibraryVersion: HOLDER_LIBRARY_VERSION,
+    holderLibraryVersion: out.library.version,
+    library: out.library,
+    category: out.category,
     disclaimer: REPORT_DISCLAIMER,
   };
 }
