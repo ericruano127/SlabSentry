@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: grafana/setup-k6-action@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0
       - name: Run ${{ inputs.scenario }}
         env:
           BASE_URL: ${{ vars.STAGING_APP_URL }}
@@ -29,6 +29,6 @@ jobs:
           case "$SCENARIO" in api-mix|stress|spike) ;; *) echo "::error::unknown scenario"; exit 1;; esac
           case "$USERS" in ''|*[!0-9]*) echo "::error::users must be a number"; exit 1;; esac
           k6 run --summary-export summary.json -e BASE_URL="$BASE_URL" -e JWT_SECRET="$JWT_SECRET" -e USERS="$USERS" "loadtest/k6/$SCENARIO.js"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with: { name: "k6-${{ inputs.scenario }}", path: summary.json }

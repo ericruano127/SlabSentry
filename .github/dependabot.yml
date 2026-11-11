@@ -6,9 +6,17 @@ updates:
     open-pull-requests-limit: 10
     groups:
       minor-and-patch: { update-types: [minor, patch] }
+    ignore:
+      # Types must match the Node version we run (22, in Dockerfile.web and CI); raise both together.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: pip
     directory: /services/vision
     schedule: { interval: weekly }
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    # Actions are pinned to commit SHAs (with the version in a comment); Dependabot updates both.
+    # One PR for all action updates.
+    groups:
+      actions: { patterns: ["*"] }

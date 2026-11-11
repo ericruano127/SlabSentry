@@ -38,7 +38,7 @@ jobs:
           test -n "$FLY_API_TOKEN" || { echo "::error::FLY_API_TOKEN is not set on the production environment."; exit 1; }
           test -n "$APP_URL" || { echo "::error::Set the PRODUCTION_APP_URL variable (e.g. https://app.example.com)."; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
@@ -54,7 +54,7 @@ jobs:
           [ "$ok" = "1" ] || { echo "::error::No successful CI run for $sha. Wait for CI or fix it first."; exit 1; }
           echo "Deploying $sha (on main, CI passed)"
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       - name: Record the images currently running (for rollback)
         id: prev

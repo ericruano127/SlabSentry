@@ -8,6 +8,7 @@ Items marked **(manual)** are account settings this repository cannot change its
 - [ ] **(manual)** Enable Dependabot alerts + security updates, secret scanning and push protection.
 - [x] CI: tests, `pnpm audit --audit-level=high`, `pip-audit`, gitleaks secret scan (`.github/workflows/ci.yml`).
 - [x] Dependabot version updates (`.github/dependabot.yml`), CODEOWNERS.
+- [x] Every GitHub Action pinned to a full commit SHA (version in a comment), including the Fly.io setup step that runs with the deploy token; Dependabot updates the pins in one grouped PR. No action runs on Node 20.
 - [ ] **(manual)** Production deploys only from `main` via the CI/CD pipeline, with required approval for the production environment. *Pipeline built (`deploy-production.yml` checks that the commit is on `main` and passed CI); add Required reviewers to the GitHub `production` environment.*
 
 ## Accounts & secrets
