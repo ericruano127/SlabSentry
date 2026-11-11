@@ -19,6 +19,48 @@ Synthetic fixtures (`services/vision/tests/synth.py`) generate cards sharing art
 ## Accessibility
 `apps/web/scripts/a11y-audit.mjs`: WCAG 2.2 A/AA (axe-core) plus a keyboard walk on every page, in light/dark and desktop/phone, signed out, signed in and as staff. Runs in CI (`accessibility` job) and fails on any violation. See `docs/ACCESSIBILITY.md`.
 
+## Browser tests (end to end)
+`apps/web/e2e/*.e2e.ts` (Playwright) drive a real browser through the main flows. They run in CI on every push (the `e2e` job), on a desktop browser, and the tests tagged `@phone` also run at phone size (Pixel 7).
+
+| Flow | What's checked |
+|---|---|
+| Sign up | landing page → sign-up → the consent screen blocks until the Terms and Privacy Policy are accepted → dashboard; 3 free verifications |
+| Quick scan → report | in-hand scan with front + back photos, label read, certification number taken from the QR code, analysis → report page, listed in History, exactly one credit used |
+| Bad photo | a blurry photo gets retake guidance; no credit used |
+| Share link | the shared report opens signed out with the same headline and no photos, image links, user id or email |
+| Out of credits | analysis is refused with an upgrade prompt, and no report starts |
+| Plans | signed out, "Start free" goes to sign-up; a free user's "Upgrade" asks checkout for the right monthly and annual price |
+| Account | "Download my data" downloads the zip; deleting the account (after typing DELETE) removes it |
+
+**Limits:**
+- Sign-in uses the development test sign-in. Real Supabase sign-up (email confirmation, Google/Apple, two-factor) needs a Supabase project, so check it by hand on staging.
+- Stripe checkout is stubbed: the tests check the app asks for the right price, not Stripe's own pages. Test purchases on staging cover that (`docs/LAUNCH_CHECKLIST.md`).
+- The live camera isn't covered; it needs a real camera.
+
+**To run locally**, start the vision service and make the test photos:
+
+```bash
+cd services/vision && .venv/bin/python -m tests.make_fixtures /tmp/fixtures && .venv/bin/uvicorn app.main:app --port 8001
+```
+
+Then create and migrate a separate database, and start the app with test sign-in. Keep uploads outside the app folder, because the development server reloads pages when files in it change:
+
+```bash
+createdb -h localhost -U postgres slabguard_e2e && cd apps/web && DATABASE_URL=postgres://postgres@localhost:5432/slabguard_e2e pnpm db:migrate
+```
+
+```bash
+cd apps/web && DATABASE_URL=postgres://postgres@localhost:5432/slabguard_e2e AUTH_MODE=dev NEXT_PUBLIC_AUTH_MODE=dev LOCAL_STORAGE_DIR=/tmp/e2e-uploads npx next dev -p 3000
+```
+
+Then run the tests:
+
+```bash
+cd apps/web && FIXTURES_DIR=/tmp/fixtures DATABASE_URL=postgres://postgres@localhost:5432/slabguard_e2e pnpm exec playwright test
+```
+
+Results and failure screenshots go to your temp folder (`slabguard-e2e`), or to `E2E_OUT`. In CI, a failed run uploads them as the `e2e-report` artifact, with a trace for each failed test.
+
 ## Load, stress & capacity
 Reduced-scale autocannon runs and the analysis-throughput benchmark: `loadtest/local/` (results in `loadtest/results/`).
 Full 10,000-user k6 suites for staging: `loadtest/k6/`. Results, breaking point and capacity model: `docs/SCALING.md`.
