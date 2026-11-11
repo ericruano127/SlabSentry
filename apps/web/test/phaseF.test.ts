@@ -18,7 +18,10 @@ import { newSession, newUser, resetDb } from "./helpers";
 
 const FIX = process.env.FIXTURES_DIR ?? "/tmp/claude-0/fixtures";
 const vision = (await fetch(`${process.env.VISION_URL}/health`).then((r) => r.ok, () => false)) && existsSync(`${FIX}/front_different_card.jpg`);
-const redisUp = await new Redis("redis://127.0.0.1:6379", { lazyConnect: true, maxRetriesPerRequest: 0 }).connect().then(() => true, () => false);
+const probe = new Redis("redis://127.0.0.1:6379", { lazyConnect: true, maxRetriesPerRequest: 0, retryStrategy: () => null });
+probe.on("error", () => {}); // absence of Redis just skips the Redis test
+const redisUp = await probe.connect().then(() => true, () => false);
+probe.disconnect();
 
 beforeAll(resetDb);
 afterAll(async () => { delete process.env.REDIS_URL; await pool.end(); });

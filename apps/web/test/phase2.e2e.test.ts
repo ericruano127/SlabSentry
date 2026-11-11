@@ -89,10 +89,13 @@ describe.skipIf(!run)("phase 2 pipeline (live vision service)", () => {
     await addImage(u, s, "front", file("front_genuine.jpg"));
     // a 'video' made of a still image repeated -> too few distinct frames
     const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const out = `${mkdtempSync(`${tmpdir()}/slabguard-`)}/static.mp4`; // portable temp path (CI has no sandbox dirs)
     execFileSync(`${process.cwd()}/../../services/vision/.venv/bin/python`, ["-c", `import cv2,numpy as np
-im=cv2.resize(cv2.imread("${FIX}/front_genuine.jpg"),(480,640));vw=cv2.VideoWriter("/tmp/claude-0/static.mp4",cv2.VideoWriter_fourcc(*"mp4v"),10,(480,640))
+im=cv2.resize(cv2.imread("${FIX}/front_genuine.jpg"),(480,640));vw=cv2.VideoWriter("${out}",cv2.VideoWriter_fourcc(*"mp4v"),10,(480,640))
 [vw.write(im) for _ in range(30)];vw.release()`]);
-    await addImage(u, s, "tilt_video", readFileSync("/tmp/claude-0/static.mp4"));
+    await addImage(u, s, "tilt_video", readFileSync(out));
     expect(preflight(await activeImages(s)).map((p) => p.role)).toContain("tilt_video");
     expect((await usageSummary(u)).freeRemaining).toBe(3);
   });
