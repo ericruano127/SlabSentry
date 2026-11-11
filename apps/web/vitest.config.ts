@@ -14,6 +14,7 @@ export default defineConfig({
       REVENUECAT_WEBHOOK_AUTH: "Bearer rc-test-secret",
       VISION_URL: process.env.VISION_URL ?? "http://127.0.0.1:8001",
     },
+    exclude: ["**/node_modules/**", "e2e/**"],
     fileParallelism: false,
     testTimeout: 60_000,
     hookTimeout: 60_000,

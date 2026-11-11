@@ -11,3 +11,7 @@ __pycache__
 .expo
 *.zip
 *.bundle
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
