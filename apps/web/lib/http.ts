@@ -1,3 +1,4 @@
+import { appMetrics, routeLabel } from "./appMetrics";
 import { queryScope } from "./db";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -31,6 +32,10 @@ export function handle<A extends unknown[]>(fn: (...a: A) => Promise<Response>) 
     }
     res.headers.set("x-request-id", requestId);
     httpStats.record(route, res.status, Date.now() - started, scope.n);
+    const label = { ...routeLabel(route, res.status), status_class: `${Math.floor(res.status / 100)}xx` };
+    appMetrics.requests.add(1, label);
+    appMetrics.requestDuration.record((Date.now() - started) / 1000, label);
+    appMetrics.dbQueries.add(scope.n, label);
     if (process.env.NODE_ENV !== "production" || process.env.EXPOSE_QUERY_COUNT === "1") res.headers.set("x-db-queries", String(scope.n));
     if (res.status >= 500 || Date.now() - started > 2000) log(res.status >= 500 ? "error" : "warn", "slow or failed request", { route, status: res.status, ms: Date.now() - started, dbQueries: scope.n, requestId });
     return res;

@@ -160,7 +160,7 @@ Each phase ends with tests, a versioned patch (public + internal changelog once 
 3. Observability: OpenTelemetry traces, error tracking, alerts.
 4. k6 load / stress / spike suites targeting 10k concurrent users; scaled-down runs here, full runs on staging; results and fixes documented, re-run after major patches.
 
-**After the plan:** mobile live camera (`docs/MOBILE_CAMERA.md`); reference library admin with two-person template review (`docs/REFERENCE_LIBRARY.md`); performance pass (`docs/PERFORMANCE.md`); Fly.io staging (`docs/STAGING_FLY.md`).
+**After the plan:** mobile live camera (`docs/MOBILE_CAMERA.md`); reference library admin with two-person template review (`docs/REFERENCE_LIBRARY.md`); performance pass (`docs/PERFORMANCE.md`); Fly.io staging (`docs/STAGING_FLY.md`); Grafana Cloud monitoring with OpenTelemetry (`docs/MONITORING.md`).
 
 ## 4. Limits to be honest about
 - A full 10k-user load test, a penetration test and legal review need staging infrastructure, a third-party firm and counsel; I can prepare scripts, checklists and drafts.

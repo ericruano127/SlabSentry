@@ -77,8 +77,9 @@ Set these with `fly secrets set NAME=value -a <app>`. Never commit them, and nev
 | `METRICS_TOKEN` | Random value (for Grafana scraping in the next step) |
 | `ADMIN_EMAILS` | Your email, to bootstrap the first staff owner |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: Stripe **test-mode** keys only |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | Optional: Grafana Cloud telemetry (`docs/MONITORING.md`) |
 
-**Vision app (`slabsentry-staging-vision`):** `VISION_API_KEY` (same value as above).
+**Vision app (`slabsentry-staging-vision`):** `VISION_API_KEY` (same value as above). Optionally, the same two `OTEL_*` secrets.
 
 `ALLOW_UNREVIEWED_LEGAL=1` is already set in `fly.staging.toml`. It allows the draft legal texts on staging only, and **production must not set it**.
 

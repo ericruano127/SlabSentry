@@ -6,7 +6,10 @@ const config: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: ["@slabguard/core"],
-  serverExternalPackages: ["pg"],
+  // Loaded with require() at runtime (not bundled) so OpenTelemetry can instrument them.
+  serverExternalPackages: ["pg", "ioredis", "@opentelemetry/sdk-node", "@opentelemetry/instrumentation", "@opentelemetry/instrumentation-http",
+    "@opentelemetry/instrumentation-undici", "@opentelemetry/instrumentation-pg", "@opentelemetry/instrumentation-ioredis",
+    "@opentelemetry/sdk-trace", "@opentelemetry/sdk-logs", "@opentelemetry/exporter-trace-otlp-proto", "@opentelemetry/exporter-logs-otlp-proto"],
   poweredByHeader: false,
   async headers() {
     return [{

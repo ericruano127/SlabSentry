@@ -42,5 +42,5 @@ Load and benchmark results are in `docs/SCALING.md`.
 
   The 10k-user figure is an extrapolation. Run the k6 suites on staging before launch.
 - **Container files weren't run.** The Docker daemon isn't available in this environment, so `Dockerfile.web`, compose and the k8s manifests were written but not built or applied. The standalone build they rely on *was* verified.
-- **No OpenTelemetry tracing.** Correlation uses request ids in JSON logs plus Prometheus metrics. Add an OTel exporter when an APM vendor is chosen.
+- **OpenTelemetry tracing:** added later; see `docs/MONITORING.md`.
 - **The PSA daily allowance (100 by default) is the practical capacity ceiling.** It has to be raised with PSA before launch; compute scaling doesn't help.

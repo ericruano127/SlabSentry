@@ -1,9 +1,11 @@
+import { registerWorkerGauges } from "../lib/appMetrics";
 import { drainJobs } from "../lib/jobs";
 import { runRetention } from "../lib/retention";
 
 // Standalone worker: run one or more of these next to the web app in production.
 async function main() {
   console.log("worker started");
+  registerWorkerGauges(); // queue/billing health gauges (no-op without telemetry)
   let lastRetention = 0;
   for (;;) {
     if (Date.now() - lastRetention > 6 * 3600_000) {

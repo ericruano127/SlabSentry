@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadF
 import base64
 import anyio
 import cv2
-from . import compare as cmp, forensics, holder, microprint, ocr, quality, seam, template, uv, video
+from . import compare as cmp, forensics, holder, microprint, ocr, quality, seam, telemetry, template, uv, video
 from .codes import decode_codes
 from .geometry import parse_geometry
 from .imaging import decode, limit
@@ -44,6 +44,7 @@ async def _lifespan(_app):
 
 
 app = FastAPI(title="SlabGuard Vision", version="0.1.0", lifespan=_lifespan)
+telemetry.setup(app)
 
 
 def auth(x_vision_key: str | None = Header(default=None)):
@@ -62,7 +63,9 @@ async def cpu(fn, *args):
     global _limiter
     if _limiter is None:
         _limiter = anyio.CapacityLimiter(int(os.environ.get("VISION_CONCURRENCY", "1")))
-    return await anyio.to_thread.run_sync(lambda: fn(*args), limiter=_limiter)
+    # Span covers waiting for a free analysis slot + the work itself (shows queueing inside a busy pod).
+    with telemetry.span(f"vision.{getattr(fn, '__qualname__', 'work')}"):
+        return await anyio.to_thread.run_sync(lambda: fn(*args), limiter=_limiter)
 
 
 def _decode_limited(data: bytes):

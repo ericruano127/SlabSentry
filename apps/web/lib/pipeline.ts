@@ -1,3 +1,4 @@
+import { trace } from "@opentelemetry/api";
 import { createHash } from "node:crypto";
 import {
   buildReport, detectGrader, extractCertCandidates, hasFeature, runEngine, type CompiledLibrary,
@@ -76,7 +77,10 @@ export async function runAnalysis(sessionId: string) {
   const session = await one(`select * from verification_sessions where id=$1`, [sessionId]);
   if (!session) return;
   const run = session.analysis_count + 1;
-  const stage = (progress: number, label: string) => q(`update verification_sessions set progress=$2, stage=$3 where id=$1`, [sessionId, progress, label]).then(() => undefined);
+  const stage = (progress: number, label: string) => {
+    trace.getActiveSpan()?.addEvent("stage", { "stage.label": label, "stage.progress": progress }); // visible on the job's trace
+    return q(`update verification_sessions set progress=$2, stage=$3 where id=$1`, [sessionId, progress, label]).then(() => undefined);
+  };
   const degraded: string[] = []; // services that were unavailable → partial report
   const t0 = Date.now();
   await q(`update verification_sessions set status='processing', error=null, updated_at=now() where id=$1`, [sessionId]);

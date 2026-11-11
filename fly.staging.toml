@@ -23,10 +23,14 @@ kill_timeout = "30s"     # let in-flight requests / the current analysis job fin
   INLINE_WORKER = "0"            # analyses run in the worker process group, never in web requests
   DB_POOL_MAX = "10"             # measured best per process (docs/PERFORMANCE.md); PgBouncer in front
   ALLOW_UNREVIEWED_LEGAL = "1"   # STAGING ONLY — production must not set this
+  # Telemetry → Grafana Cloud (active once the OTEL_EXPORTER_OTLP_ENDPOINT/_HEADERS secrets are set; docs/MONITORING.md).
+  # The web process reports as slabsentry-web; the worker sets slabsentry-worker in its command.
+  OTEL_RESOURCE_ATTRIBUTES = "service.namespace=staging,deployment.environment.name=staging"
 
 [processes]
   app = "node apps/web/server.js"
-  worker = "node_modules/.bin/tsx apps/web/scripts/worker.ts"
+  # The preload starts OpenTelemetry before any ES module loads (required to instrument pg/fetch in ESM).
+  worker = "sh -c 'OTEL_SERVICE_NAME=slabsentry-worker exec node --import ./apps/web/scripts/otel-preload.mjs --import ./apps/web/node_modules/tsx/dist/loader.mjs apps/web/scripts/worker.ts'"
 
 [http_service]
   processes = ["app"]

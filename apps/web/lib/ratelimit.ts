@@ -1,3 +1,4 @@
+import { appMetrics } from "./appMetrics";
 import { one } from "./db";
 import { HttpError } from "./http";
 
@@ -55,6 +56,7 @@ export async function rateLimit(key: string, limit: number, windowSec: number) {
   const n = await incr(key, windowSec);
   if (n > limit) {
     limiterStats.rejected++;
+    appMetrics.rateLimited.add(1);
     throw new HttpError(429, "rate_limited", "Too many requests. Please wait a moment and try again.", { retryAfterSec: windowSec });
   }
 }

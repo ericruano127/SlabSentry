@@ -35,7 +35,8 @@ services:
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, vision: { condition: service_started } }
   worker:
     build: { context: ., dockerfile: Dockerfile.web }
-    command: ["node_modules/.bin/tsx", "apps/web/scripts/worker.ts"]
+    # preload = OpenTelemetry for ES modules (no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set)
+    command: ["node", "--import", "./apps/web/scripts/otel-preload.mjs", "--import", "./apps/web/node_modules/tsx/dist/loader.mjs", "apps/web/scripts/worker.ts"]
     environment: *webenv
     depends_on: { postgres: { condition: service_healthy }, vision: { condition: service_started } }
     deploy: { replicas: 2 }

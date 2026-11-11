@@ -14,6 +14,8 @@ kill_timeout = "30s"
   VISION_THREADS = "1"
   VISION_CONCURRENCY = "1"
   VISION_WARMUP = "1"    # OCR models load before the Machine passes its check
+  OTEL_SERVICE_NAME = "slabsentry-vision"
+  OTEL_RESOURCE_ATTRIBUTES = "service.namespace=staging,deployment.environment.name=staging"
 
 [http_service]
   internal_port = 8001

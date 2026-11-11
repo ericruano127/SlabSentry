@@ -1,0 +1,64 @@
+# Alert rules for Grafana Cloud (Prometheus rule format) using the OTLP-pushed metric names.
+# Load with Grafana Alerting → "Import to Grafana-managed rules", or with mimirtool (docs/MONITORING.md).
+# `job` is "<service.namespace>/<service.name>", e.g. "staging/slabsentry-worker"; alerts fire per environment.
+# (deploy/monitoring/alerts.yml is the equivalent for a self-hosted Prometheus scraping /api/metrics.)
+groups:
+  - name: slabsentry
+    rules:
+      - alert: AnalysisWorkersSilent
+        # No worker has reported queue gauges: workers are down (or telemetry broke). Analyses won't run.
+        expr: absent_over_time(slabguard_jobs{job=~".+/slabsentry-worker"}[15m])
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "No analysis worker has reported for 15 minutes" }
+      - alert: AnalysisQueueBacklog
+        expr: max by (job) (slabguard_queue_oldest_age_seconds{job=~".+/slabsentry-worker"}) > 300
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Oldest queued analysis is {{ $value | humanizeDuration }} old ({{ $labels.job }})" }
+      - alert: AnalysisSlow
+        expr: histogram_quantile(0.95, sum by (le, job) (rate(slabguard_analysis_duration_seconds_bucket{outcome="done"}[15m]))) > 60
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "p95 analysis time above 60 s ({{ $labels.job }})" }
+      - alert: AnalysisFailures
+        expr: |
+          sum by (job) (rate(slabguard_analyses_total{outcome=~"failed|error|vision_unavailable"}[15m]))
+            / sum by (job) (rate(slabguard_analyses_total[15m])) > 0.1
+        for: 10m
+        labels: { severity: critical }
+        annotations: { summary: "More than 10% of analyses failing ({{ $labels.job }})" }
+      - alert: ApiErrorRate
+        expr: |
+          sum by (job) (rate(slabguard_api_requests_total{status_class="5xx"}[5m]))
+            / sum by (job) (rate(slabguard_api_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "API 5xx rate above 2% ({{ $labels.job }})" }
+      - alert: ApiLatency
+        expr: histogram_quantile(0.95, sum by (le, job) (rate(slabguard_api_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 latency above 1 s ({{ $labels.job }})" }
+      - alert: DatabasePoolSaturated
+        # Requests queueing for a DB connection: the limit measured in docs/PERFORMANCE.md. Add web Machines.
+        expr: max by (job) (db_client_connection_pending_requests) > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Requests waiting for database connections ({{ $labels.job }})" }
+      - alert: DbQueriesPerRequestRegression
+        expr: |
+          sum by (job) (rate(slabguard_db_queries_total[30m])) / sum by (job) (rate(slabguard_api_requests_total[30m])) > 6
+        for: 30m
+        labels: { severity: info }
+        annotations: { summary: "Average DB round-trips per request doubled vs. the budget ({{ $labels.job }})" }
+      - alert: BillingWebhookFailures
+        expr: max by (job) (slabguard_billing_webhook_failures_last_hour) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "Billing webhooks failing: subscriptions/credits may be out of date" }
+      - alert: RateLimitSpike
+        expr: sum by (job) (rate(slabguard_rate_limited_total[5m])) > 5
+        for: 10m
+        labels: { severity: info }
+        annotations: { summary: "Unusual number of rate-limited requests (possible abuse) ({{ $labels.job }})" }

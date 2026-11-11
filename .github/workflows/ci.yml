@@ -49,6 +49,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build web/worker image
         run: docker build -f Dockerfile.web -t slabsentry-web:ci --build-arg NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder .
+      - name: Smoke-test worker image start-up (telemetry preload + modules resolve)
+        run: |
+          docker run --rm -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 -e OTEL_METRICS_EXPORTER=none slabsentry-web:ci \
+            node --import ./apps/web/scripts/otel-preload.mjs -e "console.log('preload ok')"
       - name: Build vision image
         run: docker build -t slabsentry-vision:ci services/vision
       - name: Smoke-test vision image (non-root, health answers)

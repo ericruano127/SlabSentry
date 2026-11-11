@@ -46,7 +46,7 @@ spec:
       containers:
         - name: worker
           image: ghcr.io/OWNER/slabguard-web:TAG
-          command: ["node_modules/.bin/tsx", "apps/web/scripts/worker.ts"]
+          command: ["node", "--import", "./apps/web/scripts/otel-preload.mjs", "--import", "./apps/web/node_modules/tsx/dist/loader.mjs", "apps/web/scripts/worker.ts"]
           envFrom: [{ secretRef: { name: slabguard-secrets } }, { configMapRef: { name: slabguard-config } }]
           resources: { requests: { cpu: "250m", memory: 384Mi }, limits: { cpu: "500m", memory: 768Mi } }
 ---
