@@ -38,7 +38,7 @@ jobs:
           test -n "$FLY_API_TOKEN" || { echo "::error::FLY_API_TOKEN is not set on the production environment."; exit 1; }
           test -n "$APP_URL" || { echo "::error::Set the PRODUCTION_APP_URL variable (e.g. https://app.example.com)."; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
