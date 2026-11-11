@@ -41,6 +41,9 @@ function analyze(frame: Frame): Analysis | null {
   const st = g.__slabguardCapture;
   const now = Date.now();
   if (now - st.last < CAPTURE_TIMING.intervalMs) return null;
+  // A long gap means the camera was closed and reopened: don't compare against a stale frame
+  // (it would read as movement and briefly show "Hold steady").
+  if (now - st.last > 2000) st.prev = null;
   st.last = now;
   let f: GrayFrame | null = null;
   const fmt = frame.pixelFormat;

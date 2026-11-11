@@ -17,22 +17,33 @@ export async function enqueueAnalysis(sessionId: string, priority: number) {
 }
 
 let draining = false;
+let stopping = false;
+let current: Promise<void> | null = null;
+
+/** Graceful shutdown: claim no new jobs, and resolve once the job in progress has finished. */
+export function stopAfterCurrentJob(): Promise<void> {
+  stopping = true;
+  return current ?? Promise.resolve();
+}
+export const isStopping = () => stopping;
+
 /** Claim and run queued jobs (FOR UPDATE SKIP LOCKED makes multiple workers safe). */
-export async function drainJobs(max = 50) {
-  if (draining) return;
+export function drainJobs(max = 50): Promise<void> {
+  if (draining) return current ?? Promise.resolve();
   draining = true;
-  try {
-    for (let i = 0; i < max; i++) {
+  current = drainLoop(max).finally(() => { draining = false; current = null; });
+  return current;
+}
+
+async function drainLoop(max: number) {
+  for (let i = 0; i < max && !stopping; i++) {
       const job = await one(
         `update jobs set status='running', attempts=attempts+1, locked_at=now(), started_at=now() where id = (
            select id from jobs where (status='queued' and run_after <= now()) or (status='running' and locked_at < now() - interval '10 minutes')
            order by priority desc, id limit 1 for update skip locked) returning *`,
       );
-      if (!job) break;
-      await runJob(job);
-    }
-  } finally {
-    draining = false;
+    if (!job) break;
+    await runJob(job);
   }
 }
 

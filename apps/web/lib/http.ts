@@ -17,7 +17,8 @@ export function handle<A extends unknown[]>(fn: (...a: A) => Promise<Response>) 
     const req = a[0] instanceof Request ? a[0] : null;
     const requestId = req?.headers.get("x-request-id") ?? crypto.randomUUID();
     const started = Date.now();
-    const route = req ? new URL(req.url).pathname.replace(/[0-9a-f-]{36}/g, ":id") : "?";
+    // ids collapsed; share-link tokens (secrets) masked before the route reaches logs, metrics or errors
+    const route = req ? new URL(req.url).pathname.replace(/[0-9a-f-]{36}/g, ":id").replace(/\/(r|share)\/[^/]+/g, "/$1/:token") : "?";
     let res: Response;
     const scope = { n: 0 };
     try {

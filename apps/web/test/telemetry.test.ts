@@ -17,6 +17,10 @@ describe("redactText", () => {
     [`session ${SESSION} done`, `session ${SESSION} done`], // pseudonymous ids kept for correlation
     ["select * from t where id=$1", "select * from t where id=$1"],
     ["PSA 10 (grade) 2024", "PSA 10 (grade) 2024"], // short numbers are fine
+    ["GET /r/Zk3pQ9vX2mL8aB1cD4eF5gH6", "GET /r/[token]"], // share links are capabilities
+    ["/api/share/Zk3pQ9vX2mL8aB1cD4eF5gH6", "/api/share/[token]"],
+    ["key xq9TestToken4mZ7pL2vR8nB5kW3 leaked", "key [token] leaked"],
+    ["/api/admin/templates/:id/review", "/api/admin/templates/:id/review"], // ordinary paths untouched
   ])("%s", (input, out) => expect(redactText(input)).toBe(out));
 });
 
@@ -66,6 +70,7 @@ describe("telemetry switches and metric labels", () => {
     expect(routeLabel(`/api/sessions/${SESSION}/images`, 201)).toEqual({ route: "/api/sessions/:id/images" });
     expect(routeLabel("/api/admin/releases/42/publish", 200)).toEqual({ route: "/api/admin/releases/:n/publish" });
     expect(routeLabel("/wp-login.php", 404)).toEqual({ route: "other" });
+    expect(routeLabel("/api/share/Zk3pQ9vX2mL8aB1cD4eF5gH6", 200)).toEqual({ route: "/api/share/:token" });
     expect(routeLabel("/api/anything/random", 404)).toEqual({ route: "other" });
   });
 });

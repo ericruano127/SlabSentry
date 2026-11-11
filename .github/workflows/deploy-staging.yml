@@ -17,7 +17,15 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # SECURITY: workflow_run also fires for CI runs of pull requests — including from forks, whose branch
+    # may be called "main" too — and runs with this repo's secrets. Only deploy successful CI runs of a
+    # PUSH to main in THIS repository; never code from a pull request or another repository.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: staging
     env:

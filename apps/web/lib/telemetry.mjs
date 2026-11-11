@@ -20,6 +20,10 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const QUERY = /\?[^\s"'#]*/g;
 const LONG_DIGITS = /\d{6,}/g;
+// Capability links: /r/<token> and /api/share/<token> grant access to a report, so the token is a secret.
+const SHARE_PATH = /\/(r|share)\/[A-Za-z0-9_-]{8,}/g;
+// Other secret-looking path/text segments: long base64url runs mixing letters and digits (tokens, keys).
+const OPAQUE = /(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-]))(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]+/g;
 
 /**
  * Remove personal or sensitive values from free text (URLs, SQL, error messages).
@@ -29,7 +33,8 @@ export function redactText(s) {
   if (typeof s !== "string" || !s) return s;
   const keep = [];
   let out = s.replace(UUID, (m) => `\u0000${keep.push(m) - 1}\u0000`);
-  out = out.replace(EMAIL, "[email]").replace(QUERY, (q) => (q.length > 1 ? "?[redacted]" : q)).replace(LONG_DIGITS, "[number]");
+  out = out.replace(EMAIL, "[email]").replace(QUERY, (q) => (q.length > 1 ? "?[redacted]" : q)).replace(SHARE_PATH, "/$1/[token]")
+    .replace(OPAQUE, "[token]").replace(LONG_DIGITS, "[number]");
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => keep[Number(i)]);
 }
 
@@ -98,6 +103,13 @@ export class ProbeFilterSampler {
 export const telemetryEnabled = () => !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.OTEL_SDK_DISABLED !== "true";
 
 let started = null;
+let flushTelemetry = async () => {};
+let deferred = false;
+
+/** The caller (e.g. the worker's graceful shutdown) will call shutdownTelemetry() itself after finishing work. */
+export function deferTelemetryShutdown() { deferred = true; }
+/** Flush and stop exporting (bounded to 5 s). Safe to call when telemetry is off. */
+export function shutdownTelemetry() { return flushTelemetry(); }
 
 /** Start the SDK once per process. Returns null when telemetry is off. */
 export async function startTelemetry(defaultServiceName) {
@@ -142,7 +154,11 @@ export async function startTelemetry(defaultServiceName) {
   // Flush buffered telemetry on shutdown. A SIGTERM listener disables Node's default exit, so exit
   // ourselves unless another handler (e.g. Next.js' graceful shutdown) is in charge.
   const flush = () => Promise.race([sdk.shutdown().catch(() => {}), new Promise((r) => setTimeout(r, 5000).unref())]);
-  process.once("SIGTERM", () => { flush().then(() => { if (process.listenerCount("SIGTERM") === 0) process.exit(0); }); });
+  flushTelemetry = flush;
+  process.once("SIGTERM", () => {
+    if (deferred) return; // the worker flushes after its current job finishes
+    flush().then(() => { if (process.listenerCount("SIGTERM") === 0) process.exit(0); });
+  });
   process.once("beforeExit", flush);
   return sdk;
 }

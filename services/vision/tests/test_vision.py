@@ -335,3 +335,16 @@ def test_quality_reports_label_sharpness():
     img = synth.photo(synth.slab(GENUINE), seed=2)
     q = quality.assess(img, "front")
     assert q["metrics"]["labelSharpness"] > 60, q["metrics"]
+
+
+def test_api_key_is_enforced_and_fails_closed_when_deployed(monkeypatch):
+    c = TestClient(app)
+    enc = cv2.imencode(".jpg", REF)[1].tobytes()
+    monkeypatch.setenv("VISION_API_KEY", "k-123")
+    assert c.post("/quality", files={"image": ("x.jpg", enc)}).status_code == 401
+    assert c.post("/quality", files={"image": ("x.jpg", enc)}, headers={"x-vision-key": "wrong"}).status_code == 401
+    assert c.post("/quality", files={"image": ("x.jpg", enc)}, headers={"x-vision-key": "k-123"}).status_code == 200
+    monkeypatch.delenv("VISION_API_KEY")
+    monkeypatch.setenv("FLY_APP_NAME", "slabsentry-staging-vision")  # deployed, key missing → refuse
+    assert c.post("/quality", files={"image": ("x.jpg", enc)}).status_code == 503
+    assert c.get("/health").status_code == 200  # health stays open for probes

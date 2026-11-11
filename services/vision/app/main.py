@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 os.environ.setdefault("OPENCV_IO_MAX_IMAGE_PIXELS", str(60_000_000))
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 import base64
+import hmac
 import anyio
 import cv2
 from . import compare as cmp, forensics, holder, microprint, ocr, quality, seam, telemetry, template, uv, video
@@ -35,6 +36,8 @@ def jsonable(v):
 MAX_BYTES = int(os.getenv("VISION_MAX_BYTES", str(15 * 1024 * 1024)))
 @asynccontextmanager
 async def _lifespan(_app):
+    if key_required() and not os.getenv("VISION_API_KEY"):
+        raise RuntimeError("Refusing to start: VISION_API_KEY is required on deployed instances")
     """Load the OCR models before serving (otherwise each new pod's first analysis takes ~3 s longer).
     Readiness probes only pass once this is done, so autoscaled pods join warm."""
     if os.environ.get("VISION_WARMUP", "1") != "0":
@@ -47,9 +50,18 @@ app = FastAPI(title="SlabGuard Vision", version="0.1.0", lifespan=_lifespan)
 telemetry.setup(app)
 
 
+def key_required() -> bool:
+    """Deployed instances must have a key (Fly sets FLY_APP_NAME); local dev and tests may run without."""
+    return bool(os.getenv("FLY_APP_NAME")) or os.getenv("VISION_REQUIRE_KEY") == "1"
+
+
 def auth(x_vision_key: str | None = Header(default=None)):
     key = os.getenv("VISION_API_KEY")
-    if key and x_vision_key != key:
+    if not key:
+        if key_required():  # fail closed if a deployed instance somehow lost its key
+            raise HTTPException(503, "vision key not configured")
+        return
+    if not x_vision_key or not hmac.compare_digest(x_vision_key.encode(), key.encode()):  # constant-time
         raise HTTPException(401, "invalid vision key")
 
 

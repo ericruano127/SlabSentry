@@ -29,7 +29,8 @@ export const appMetrics = {
 /** Low-cardinality route label: ids collapsed, unknown paths grouped (404 probing can't explode series). */
 export function routeLabel(pathname: string, status: number): Attributes {
   if (status === 404 || !pathname.startsWith("/api/")) return { route: "other" };
-  return { route: pathname.replace(/[0-9a-f-]{36}/gi, ":id").replace(/\/\d+(?=\/|$)/g, "/:n").slice(0, 80) };
+  // Share tokens are secrets and unbounded: never let them become a label value.
+  return { route: pathname.replace(/[0-9a-f-]{36}/gi, ":id").replace(/\/(r|share)\/[^/]+/g, "/$1/:token").replace(/\/\d+(?=\/|$)/g, "/:n").slice(0, 80) };
 }
 
 let gaugesRegistered = false;

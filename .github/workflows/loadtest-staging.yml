@@ -22,10 +22,13 @@ jobs:
           BASE_URL: ${{ vars.STAGING_APP_URL }}
           JWT_SECRET: ${{ secrets.STAGING_SUPABASE_JWT_SECRET }}
           USERS: ${{ inputs.users }}
+          SCENARIO: ${{ inputs.scenario }}
         run: |
           test -n "$BASE_URL" && test -n "$JWT_SECRET" || { echo "::error::Set STAGING_APP_URL (variable) and STAGING_SUPABASE_JWT_SECRET (secret) on the staging environment."; exit 1; }
           case "$BASE_URL" in *staging*|*fly.dev*) ;; *) echo "::error::BASE_URL doesn't look like staging: $BASE_URL"; exit 1;; esac
-          k6 run --summary-export summary.json -e BASE_URL="$BASE_URL" -e JWT_SECRET="$JWT_SECRET" -e USERS="$USERS" "loadtest/k6/${{ inputs.scenario }}.js"
+          case "$SCENARIO" in api-mix|stress|spike) ;; *) echo "::error::unknown scenario"; exit 1;; esac
+          case "$USERS" in ''|*[!0-9]*) echo "::error::users must be a number"; exit 1;; esac
+          k6 run --summary-export summary.json -e BASE_URL="$BASE_URL" -e JWT_SECRET="$JWT_SECRET" -e USERS="$USERS" "loadtest/k6/$SCENARIO.js"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: "k6-${{ inputs.scenario }}", path: summary.json }

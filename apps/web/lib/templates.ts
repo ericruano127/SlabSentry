@@ -27,6 +27,12 @@ export const EVIDENCE_TYPES = {
 } as const;
 export type EvidenceType = keyof typeof EVIDENCE_TYPES;
 
+/** Validate a template id from the URL (malformed ids are a 404, not a database error). */
+export function templateId(id: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new HttpError(404, "not_found", "Template not found.");
+  return id;
+}
+
 /** Max variants compared per generation and kind during analysis (best match is used). */
 export const MAX_VARIANTS = 3;
 
@@ -89,8 +95,12 @@ export async function submitTemplate(actor: string, p: SubmitInput) {
   // 1. Source bytes (metadata stripped for uploads — session images were stripped on ingest).
   let original: Buffer, sourceSession: string | null = null, sourceImage: string | null = null;
   if ("imageId" in p.source) {
-    const img = await one(`select id, session_id, storage_key from submitted_images where id=$1 and storage_key is not null`, [p.source.imageId]);
-    if (!img) throw new HttpError(404, "not_found", "Image not found.");
+    // Only from the submitter's OWN sessions: a user's photo must never be copied into the library (where it
+    // would outlive their retention/deletion rights) or be retrievable through the staff preview by id.
+    const img = await one(
+      `select i.id, i.session_id, i.storage_key from submitted_images i join verification_sessions s on s.id = i.session_id
+        where i.id=$1 and i.storage_key is not null and s.user_id=$2`, [p.source.imageId, actor]);
+    if (!img) throw new HttpError(404, "not_found", "Image not found in your own sessions. Upload the photo instead.");
     original = await storage.get(img.storage_key);
     sourceSession = img.session_id; sourceImage = img.id;
   } else {

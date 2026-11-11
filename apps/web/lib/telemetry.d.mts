@@ -11,3 +11,5 @@ export declare function telemetryEnabled(): boolean;
 export declare function startTelemetry(defaultServiceName: string): Promise<{ shutdown(): Promise<void> } | null>;
 export declare function traceIds(): { trace_id?: string; span_id?: string };
 export declare class ProbeFilterSampler { constructor(inner: unknown); shouldSample(...args: unknown[]): unknown; }
+export declare function deferTelemetryShutdown(): void;
+export declare function shutdownTelemetry(): Promise<void>;

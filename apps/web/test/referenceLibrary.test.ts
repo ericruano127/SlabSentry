@@ -123,6 +123,16 @@ describe.skipIf(!run)("reference library admin (live vision service)", () => {
     expect(cov.kinds.label).toEqual({ active: 1, pending: 0 });
   });
 
+  it("a user's photo can't be copied into the library by id; malformed ids are a 404", async () => {
+    const user = await newUser();
+    const sess = await newSession(user);
+    const img = await addImage(user, sess, "front", file("reference_labeled.jpg"));
+    const r = await submitPOST(req("/api/admin/templates", adminA, { method: "POST", aal2: true, json: { ...label(), imageId: img.id } }));
+    expect(r.status).toBe(404); // not the submitter's own session
+    expect((await review(adminA, "not-a-uuid", "approve")).status).toBe(404);
+    expect((await imageGET(req("/api/admin/templates/xyz/image", adminA, { aal2: true }), ctx("xyz"))).status).toBe(404);
+  });
+
   it("rejection needs a reason", async () => {
     const r = await (await upload(analyst, file("front_genuine.jpg"), label({ variant: "maybe" }))).json();
     expect(r.consistency.compared).toBe(1); // compared with the one approved template ("special")
