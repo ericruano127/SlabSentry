@@ -22,6 +22,8 @@ Fly Managed Postgres (PgBouncer) · Upstash Redis (via Fly) · Supabase (auth + 
 | `.github/workflows/ci.yml` (`images` job) | Builds both images on every push, and checks that the vision image runs as non-root and its health check answers |
 | `.github/workflows/loadtest-staging.yml` | Manual k6 run against staging |
 
+The worker also has an internal health check (port 8081). Fly restarts a worker whose job loop is stuck. Production differences: `docs/PRODUCTION_FLY.md`.
+
 Supabase is still needed for **sign-in and private image storage**; Fly provides the compute, Postgres and Redis. Use a **separate Supabase project for staging**, never production's.
 
 ## One-time setup (about 30 minutes)

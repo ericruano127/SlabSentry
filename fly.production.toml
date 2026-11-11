@@ -1,0 +1,72 @@
+# Fly.io PRODUCTION: web/API + background workers. Deployed only by .github/workflows/deploy-production.yml
+# (manual, approval-gated, blue-green, automatic rollback). Differences from staging are marked ★.
+# Setup and launch steps: docs/PRODUCTION_FLY.md and docs/LAUNCH_CHECKLIST.md.
+app = "slabsentry-web"            # ★ override with the FLY_WEB_APP variable on the production environment
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"               # workers finish the analysis in progress (graceful shutdown)
+
+[build]
+  dockerfile = "Dockerfile.web"
+
+[deploy]
+  release_command = "sh -c 'DATABASE_URL=${DIRECT_DATABASE_URL:-$DATABASE_URL} node_modules/.bin/tsx apps/web/scripts/migrate.ts'"
+  release_command_timeout = "5m"
+  # ★ Blue-green: new Machines boot next to the old ones and take traffic only after ALL pass their health
+  #   checks; if any fail, the old release keeps serving. Migrations must be backwards-compatible
+  #   (expand → deploy → contract), because the previous release keeps running against the new schema.
+  strategy = "bluegreen"
+  wait_timeout = "10m"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  SERVICE_NAME = "slabsentry-web"
+  INLINE_WORKER = "0"
+  DB_POOL_MAX = "10"
+  # ★ No ALLOW_UNREVIEWED_LEGAL: the server refuses to start until the legal documents are approved.
+  OTEL_RESOURCE_ATTRIBUTES = "service.namespace=production,deployment.environment.name=production"
+  OTEL_TRACES_SAMPLER_ARG = "0.25"   # ★ keep 25% of traces (whole traces); metrics/logs unaffected
+
+[processes]
+  app = "node apps/web/server.js"
+  worker = "sh -c 'OTEL_SERVICE_NAME=slabsentry-worker WORKER_HEALTH_PORT=8081 exec node --import ./apps/web/scripts/otel-preload.mjs --import ./apps/web/node_modules/tsx/dist/loader.mjs apps/web/scripts/worker.ts'"
+
+[http_service]
+  processes = ["app"]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"       # ★ always on
+  auto_start_machines = true
+  min_machines_running = 2         # ★ two Machines minimum: no single point of failure
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 300
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/ready"
+
+[checks]
+  [checks.worker_alive]
+    type = "http"
+    port = 8081
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    processes = ["worker"]
+
+[[vm]]
+  size = "shared-cpu-2x"           # ★ more headroom per web Machine
+  memory = "1gb"
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  processes = ["worker"]

@@ -1,0 +1,104 @@
+name: deploy-production
+# PRODUCTION deploy to Fly.io. Manual only, and gated:
+#   1. runs in the GitHub "production" environment → configure Required reviewers there (the approval step);
+#   2. the commit must be on main and have a successful CI run;
+#   3. blue-green deploys (see fly.production.toml): unhealthy new Machines never receive traffic;
+#   4. after deploying, a smoke test; if it fails, both apps are rolled back to the images they ran before.
+# Setup: docs/PRODUCTION_FLY.md.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA or tag to deploy (must be on main and have passed CI)"
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  actions: read   # to confirm CI passed for the commit
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production   # Required reviewers on this environment = manual approval before any step runs
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      WEB_APP: ${{ vars.FLY_WEB_APP || 'slabsentry-web' }}
+      VISION_APP: ${{ vars.FLY_VISION_APP || 'slabsentry-vision' }}
+      APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+      REF: ${{ inputs.ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "$FLY_API_TOKEN" || { echo "::error::FLY_API_TOKEN is not set on the production environment."; exit 1; }
+          test -n "$APP_URL" || { echo "::error::Set the PRODUCTION_APP_URL variable (e.g. https://app.example.com)."; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Gate — commit is on main and passed CI
+        id: gate
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$sha is not on main."; exit 1; }
+          ok="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci --commit "$sha" --status success --limit 1 --json databaseId -q 'length')"
+          [ "$ok" = "1" ] || { echo "::error::No successful CI run for $sha. Wait for CI or fix it first."; exit 1; }
+          echo "Deploying $sha (on main, CI passed)"
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Record the images currently running (for rollback)
+        id: prev
+        run: |
+          img() { flyctl machine list --app "$1" --json 2>/dev/null | jq -r '[.[]? | select(.state=="started") | (.config.image // empty)] | first // empty'; }
+          echo "web=$(img "$WEB_APP")" >> "$GITHUB_OUTPUT"
+          echo "vision=$(img "$VISION_APP")" >> "$GITHUB_OUTPUT"
+          echo "web: $(img "$WEB_APP")"; echo "vision: $(img "$VISION_APP")"
+
+      - name: Deploy vision (private, blue-green)
+        working-directory: services/vision
+        run: flyctl deploy --config fly.production.toml --app "$VISION_APP" --remote-only --flycast --no-public-ips --wait-timeout 10m
+
+      - name: Deploy web + worker (migrations first, blue-green)
+        env:
+          SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.PRODUCTION_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY" || { echo "::error::Set PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_ANON_KEY variables."; exit 1; }
+          flyctl deploy --config fly.production.toml --app "$WEB_APP" --remote-only --wait-timeout 10m \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --build-arg NEXT_PUBLIC_APP_URL="$APP_URL"
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          code=000
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /tmp/ready.json -w "%{http_code}" "$APP_URL/api/ready") && [ "$code" = 200 ] && break; sleep 6
+          done
+          cat /tmp/ready.json; echo
+          test "$code" = 200 || { echo "::error::/api/ready returned $code"; exit 1; }
+          test "$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/api/plans")" = 200 || { echo "::error::/api/plans failed"; exit 1; }
+          if curl -s --max-time 5 -o /dev/null "https://$VISION_APP.fly.dev/health"; then echo "::error::vision is publicly reachable"; exit 1; fi
+
+      - name: Roll back on failure
+        if: failure() && steps.prev.outcome == 'success'
+        env:
+          PREV_WEB: ${{ steps.prev.outputs.web }}
+          PREV_VISION: ${{ steps.prev.outputs.vision }}
+        run: |
+          # Images only: database migrations are not reversed, which is why they must be backwards-compatible.
+          if [ -n "$PREV_VISION" ]; then (cd services/vision && flyctl deploy --config fly.production.toml --app "$VISION_APP" --image "$PREV_VISION" --flycast --no-public-ips --wait-timeout 10m); fi
+          if [ -n "$PREV_WEB" ]; then flyctl deploy --config fly.production.toml --app "$WEB_APP" --image "$PREV_WEB" --wait-timeout 10m; fi
+          if [ -z "$PREV_WEB$PREV_VISION" ]; then echo "::warning::No previous images recorded (first deploy?) — nothing to roll back to."; fi
+          echo "::error::Deploy of ${{ steps.gate.outputs.sha }} failed and was rolled back. See the logs above."

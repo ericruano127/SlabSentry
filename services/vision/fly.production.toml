@@ -1,0 +1,44 @@
+# Fly.io PRODUCTION: image-analysis service. PRIVATE ONLY (Flycast; deployed with --no-public-ips).
+# Differences from staging are marked ★.
+app = "slabsentry-vision"          # ★ override with the FLY_VISION_APP variable
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  strategy = "bluegreen"           # ★ new Machines must pass /health (models loaded) before taking traffic
+  wait_timeout = "10m"
+
+[env]
+  VISION_WORKERS = "2"
+  VISION_THREADS = "1"
+  VISION_CONCURRENCY = "1"
+  VISION_WARMUP = "1"
+  OTEL_SERVICE_NAME = "slabsentry-vision"
+  OTEL_RESOURCE_ATTRIBUTES = "service.namespace=production,deployment.environment.name=production"
+
+[http_service]
+  internal_port = 8001
+  force_https = false               # Flycast is HTTP-only (private network, WireGuard-encrypted)
+  auto_stop_machines = "stop"       # extra Machines stop when idle…
+  auto_start_machines = true
+  min_machines_running = 2          # ★ …but two stay warm: no cold start for users, no single point of failure
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 2
+    hard_limit = 6
+
+  [[http_service.checks]]
+    grace_period = "40s"
+    interval = "15s"
+    method = "GET"
+    timeout = "2s"
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "performance"          # ★ dedicated CPUs: analysis is CPU-bound (~9 vCPU-s each); shared CPUs throttle
+  cpus = 2
+  memory = "4gb"

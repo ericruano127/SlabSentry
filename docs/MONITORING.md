@@ -70,6 +70,8 @@ OTLP names become Prometheus names in Grafana: dots become underscores, units be
 | `slabguard_analysis_duration_seconds_bucket{outcome}` | Time per analysis job |
 | `slabguard_jobs{status}`, `slabguard_queue_oldest_age_seconds` | Queue health (reported by workers; use `max`) |
 | `slabguard_billing_webhook_failures_last_hour` | Failed Stripe/RevenueCat webhooks |
+| `slabguard_auth_failures_total{reason}` | Rejected sign-in tokens (`invalid_token`) and staff-permission denials (`forbidden`) |
+| `slabguard_admin_role_changes_total{role}` | Staff role assignments (details in the admin audit log) |
 | `db_client_connection_pending_requests` | Requests waiting for a pooled DB connection (first sign of DB saturation) |
 | `http_server_duration_milliseconds_bucket{http_route}` (vision) | Analysis-service endpoint latency |
 
@@ -88,6 +90,8 @@ The exact suffixes depend on Grafana's OTLP translation settings. If a panel is 
 | DatabasePoolSaturated | More than 20 requests waiting for DB connections | warning |
 | DbQueriesPerRequestRegression | Average round-trips per request above 6 | info |
 | RateLimitSpike | More than 5 rate-limited requests per second | info |
+| AuthFailureSpike | More than 1 auth failure per second for 10 minutes (token stuffing or probing) | warning |
+| StaffRoleChanged | Any staff role assignment | info |
 
 `ALERT_WEBHOOK_URL` (an immediate post for each new error type) still works alongside these.
 
@@ -123,6 +127,6 @@ Docker Compose, Kubernetes and Fly already use this command, and CI checks the p
 - one analysis is one trace across worker and analysis service;
 - database, Redis and fetch spans are present in the production Next.js build and in the ES-module worker;
 - probes are filtered, and nothing leaks;
-- all 31 PromQL expressions in the dashboard and rules parse.
+- all 35 PromQL expressions in the dashboard and rules parse.
 
 **Not verified:** the connection to a real Grafana Cloud stack. Grafana isn't reachable from the development sandbox, so metric-name suffixes and the rule import should be checked on first use.

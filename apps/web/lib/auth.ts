@@ -1,3 +1,4 @@
+import { appMetrics } from "./appMetrics";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -54,6 +55,7 @@ export async function getUser(req: Request, opts: { optional?: boolean } = {}): 
     try {
       p = await verifySupabaseJwt(h.slice(7));
     } catch {
+      appMetrics.authFailures.add(1, { reason: "invalid_token" }); // expired or forged tokens: alert on spikes
       throw new HttpError(401, "invalid_token", "Session expired. Please sign in again.");
     }
     const email = (p.email as string) ?? null;

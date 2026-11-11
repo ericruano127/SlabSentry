@@ -30,7 +30,7 @@ kill_timeout = "30s"     # let in-flight requests / the current analysis job fin
 [processes]
   app = "node apps/web/server.js"
   # The preload starts OpenTelemetry before any ES module loads (required to instrument pg/fetch in ESM).
-  worker = "sh -c 'OTEL_SERVICE_NAME=slabsentry-worker exec node --import ./apps/web/scripts/otel-preload.mjs --import ./apps/web/node_modules/tsx/dist/loader.mjs apps/web/scripts/worker.ts'"
+  worker = "sh -c 'OTEL_SERVICE_NAME=slabsentry-worker WORKER_HEALTH_PORT=8081 exec node --import ./apps/web/scripts/otel-preload.mjs --import ./apps/web/node_modules/tsx/dist/loader.mjs apps/web/scripts/worker.ts'"
 
 [http_service]
   processes = ["app"]
@@ -50,6 +50,17 @@ kill_timeout = "30s"     # let in-flight requests / the current analysis job fin
     method = "GET"
     timeout = "5s"
     path = "/api/ready"   # 503 when the database or reference library is unavailable
+
+# Worker liveness (it has no public service): Fly restarts a worker whose job loop is stuck.
+[checks]
+  [checks.worker_alive]
+    type = "http"
+    port = 8081
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    processes = ["worker"]
 
 [[vm]]
   size = "shared-cpu-1x"

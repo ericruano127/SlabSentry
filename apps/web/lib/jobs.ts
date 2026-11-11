@@ -27,6 +27,11 @@ export function stopAfterCurrentJob(): Promise<void> {
 }
 export const isStopping = () => stopping;
 
+/** Liveness: updated every loop tick and after each job, so a hung worker can be detected and restarted. */
+let lastActivity = Date.now();
+export const markActivity = () => { lastActivity = Date.now(); };
+export const lastActivityAt = () => lastActivity;
+
 /** Claim and run queued jobs (FOR UPDATE SKIP LOCKED makes multiple workers safe). */
 export function drainJobs(max = 50): Promise<void> {
   if (draining) return current ?? Promise.resolve();
@@ -44,6 +49,7 @@ async function drainLoop(max: number) {
       );
     if (!job) break;
     await runJob(job);
+    markActivity();
   }
 }
 

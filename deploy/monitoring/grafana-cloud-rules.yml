@@ -62,3 +62,14 @@ groups:
         for: 10m
         labels: { severity: info }
         annotations: { summary: "Unusual number of rate-limited requests (possible abuse) ({{ $labels.job }})" }
+      - alert: AuthFailureSpike
+        # Many rejected tokens or staff-permission denials: credential stuffing, forged tokens or probing.
+        expr: sum by (job, reason) (rate(slabguard_auth_failures_total[5m])) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Unusual auth failures ({{ $labels.reason }}) on {{ $labels.job }}" }
+      - alert: StaffRoleChanged
+        # Every staff role assignment notifies the team (details in the admin audit log).
+        expr: sum by (job, role) (increase(slabguard_admin_role_changes_total[10m])) > 0
+        labels: { severity: info }
+        annotations: { summary: "A staff role was set to {{ $labels.role }}. Confirm it was expected (admin audit log)" }

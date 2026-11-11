@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appMetrics } from "@/lib/appMetrics";
 import { one, tx } from "@/lib/db";
 import { handle, HttpError, json } from "@/lib/http";
 import { requirePermission, ROLES } from "@/lib/rbac";
@@ -14,5 +15,6 @@ export const PUT = handle(async (req: Request) => {
     await c.query(`update app_users set role=$2, is_admin=$3 where id=$1`, [target.id, role, role === "admin" || role === "owner"]);
     await c.query(`insert into admin_audit_log (admin_id,action,before,after) values ($1,'role.update',$2,$3)`, [actor.id, JSON.stringify({ userId: target.id, role: target.role }), JSON.stringify({ userId: target.id, role, reason })]);
   });
+  appMetrics.roleChanges.add(1, { role }); // alerting: every staff role change notifies the team
   return json({ ok: true, role });
 });

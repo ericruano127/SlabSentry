@@ -1,3 +1,4 @@
+import { appMetrics } from "./appMetrics";
 import { requireUser, type AuthUser } from "./auth";
 import { HttpError } from "./http";
 
@@ -29,7 +30,10 @@ export const can = (role: Role, p: Permission) => (PERMISSIONS[p] as readonly Ro
 
 export async function requirePermission(req: Request, p: Permission): Promise<AuthUser> {
   const u = await requireUser(req);
-  if (!can(u.role, p)) throw new HttpError(403, "forbidden", "You don't have access to this.");
+  if (!can(u.role, p)) {
+    appMetrics.authFailures.add(1, { reason: "forbidden" }); // someone probing staff endpoints
+    throw new HttpError(403, "forbidden", "You don't have access to this.");
+  }
   if (u.aal !== "aal2") throw new HttpError(403, "mfa_required", "Staff tools require two-factor authentication. Enable it in Account → Security, then sign in again.");
   return u;
 }

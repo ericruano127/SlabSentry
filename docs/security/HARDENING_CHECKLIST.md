@@ -8,7 +8,7 @@ Items marked **(manual)** are account settings this repository cannot change its
 - [ ] **(manual)** Enable Dependabot alerts + security updates, secret scanning and push protection.
 - [x] CI: tests, `pnpm audit --audit-level=high`, `pip-audit`, gitleaks secret scan (`.github/workflows/ci.yml`).
 - [x] Dependabot version updates (`.github/dependabot.yml`), CODEOWNERS.
-- [ ] **(manual)** Production deploys only from `main` via the CI/CD pipeline, with required approval for the production environment.
+- [ ] **(manual)** Production deploys only from `main` via the CI/CD pipeline, with required approval for the production environment. *Pipeline built (`deploy-production.yml` checks that the commit is on `main` and passed CI); add Required reviewers to the GitHub `production` environment.*
 
 ## Accounts & secrets
 - [ ] **(manual)** 2FA on Supabase, hosting, Stripe, RevenueCat, Apple Developer, Google Play Console, Google Cloud, Anthropic, domain registrar, email.
@@ -27,7 +27,7 @@ Items marked **(manual)** are account settings this repository cannot change its
 - [ ] Malware scanning for uploads if file types beyond images/videos are ever accepted (current types are decoded and re-validated).
 
 ## Monitoring & response (Phase F completes)
-- [ ] Centralized logs with alerts on auth anomalies, 5xx spikes, webhook failures, admin/role changes.
+- [ ] Centralized logs with alerts on auth anomalies, 5xx spikes, webhook failures, admin/role changes. *Built (`docs/MONITORING.md`: AuthFailureSpike, ApiErrorRate, BillingWebhookFailures, StaffRoleChanged); tick once Grafana Cloud is connected and a contact point is set.*
 - [ ] Incident response plan reviewed with counsel (`INCIDENT_RESPONSE.md`); contacts filled in.
 
 ## Before public launch

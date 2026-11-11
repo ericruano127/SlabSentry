@@ -32,6 +32,9 @@ createdb slabguard_test && pnpm --filter @slabguard/web test   # TEST_DATABASE_U
 
 AUTH_MODE=dev is ignored when `NODE_ENV=production`.
 
+### Production on Fly.io
+See `docs/PRODUCTION_FLY.md`. Deploys are manual, approval-gated and blue-green, with automatic rollback. Everything left before launch is listed in `docs/LAUNCH_CHECKLIST.md`.
+
 ### Staging on Fly.io
 See `docs/STAGING_FLY.md`. It covers `fly.staging.toml`, `services/vision/fly.staging.toml`, automatic deploys after CI, and manual k6 runs.
 
