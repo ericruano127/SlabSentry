@@ -53,7 +53,7 @@ export function PlanCards({ plans, me }: { plans: Plan[]; me: Me | null }) {
           const featured = p.id === "pro";
           let cta = p.id === "free" ? "Start free" : "Choose plan";
           if (me) cta = isCurrent ? "Current plan" : p.rank > currentRank ? "Upgrade" : "Downgrade";
-          const disabled = isCurrent || !!busy || (!!provider && provider !== "stripe") || (p.id !== "free" && !price?.webPurchasable && provider !== "stripe") || (p.id === "free" && !provider);
+          const disabled = isCurrent || !!busy || (!!provider && provider !== "stripe") || (p.id !== "free" && !price?.webPurchasable && provider !== "stripe") || (p.id === "free" && !!me && !provider); // signed out: "Start free" goes to sign-up
           return (
             <div key={p.id} className={`card plan ${featured ? "featured" : ""}`}>
               {featured && <span className="pill ok" style={{ position: "absolute", top: 14, right: 14 }}>Most popular</span>}

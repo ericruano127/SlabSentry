@@ -81,7 +81,7 @@ Everything between now and a public launch, in rough order. Last updated 2026-11
 |---|---|---|---|
 | ✅ | Accessibility audit (WCAG 2.2 AA, axe + keyboard): 7 issue types fixed, 0 violations in 57 scans, enforced in CI | Claude | `docs/ACCESSIBILITY.md` |
 | ⬜ | Screen-reader session (VoiceOver/TalkBack) on the main flows, web and mobile | You (or a specialist) | `docs/ACCESSIBILITY.md` |
-| ⬜ | Browser end-to-end tests of the main flows in CI | Claude | — |
+| ✅ | Browser end-to-end tests of the main flows in CI (sign up, scan → report → share, out of credits, plans, account; desktop + phone) | Claude | `docs/TESTING.md` § Browser tests |
 | ⬜ | CI upkeep: merge the GitHub Actions update; move off deprecated Node 20 actions | Claude | — |
 
 ## Launch day

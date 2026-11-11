@@ -4,7 +4,7 @@ import { db, quickScanToConfirm, signInNewUser, uploadPhoto } from "./helpers";
 test.describe("sign up", () => {
   test("new user signs up, accepts the terms and lands on the dashboard @phone", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: /free account|get started|sign up/i }).first().click();
+    await page.getByRole("link", { name: /^Start free/ }).click();
     await expect(page).toHaveURL(/\/signup/);
     await expect(page.getByRole("heading", { name: "Create your free account" })).toBeVisible();
     await page.getByRole("button", { name: "Continue as local dev user" }).click();
@@ -14,11 +14,13 @@ test.describe("sign up", () => {
     await expect(agree).toBeDisabled();
     await page.getByRole("checkbox").first().check();
     await agree.click();
+    await expect(agree).toBeHidden(); // the page reloads once the consent is saved
+    await page.waitForLoadState("load");
 
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.getByRole("link", { name: "Scan new slab" })).toBeVisible();
     await expect(page.getByText(/No scans yet/)).toBeVisible();
-    await page.goto("/scan");
+    await page.getByRole("link", { name: "Scan new slab" }).click();
     await expect(page.getByText("3 verifications available")).toBeVisible();
   });
 });
