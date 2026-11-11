@@ -15,6 +15,8 @@ export const pool: pg.Pool = g.__pool ?? (g.__pool = new pg.Pool({
   connectionString: env.databaseUrl,
   max: Number(process.env.DB_POOL_MAX ?? 10),
   idleTimeoutMillis: 30_000,
+  // Recycle connections before poolers (e.g. Fly Managed Postgres' PgBouncer, 600 s) close them mid-query.
+  maxLifetimeSeconds: Number(process.env.DB_MAX_LIFETIME_SECONDS ?? 540),
   connectionTimeoutMillis: 5_000,
   statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS ?? 15_000),
 }));

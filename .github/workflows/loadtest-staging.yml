@@ -1,0 +1,31 @@
+name: loadtest-staging
+# Manual k6 run against STAGING (never production). Results are attached to the run as an artifact.
+# One GitHub runner can't reliably drive 10,000 VUs — use USERS ≤ 2000 here, k6 Cloud or several runners for full scale.
+on:
+  workflow_dispatch:
+    inputs:
+      scenario: { description: "k6 scenario", type: choice, options: [api-mix, stress, spike], default: api-mix }
+      users: { description: "Virtual users (api-mix)", default: "2000" }
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Run ${{ inputs.scenario }}
+        env:
+          BASE_URL: ${{ vars.STAGING_APP_URL }}
+          JWT_SECRET: ${{ secrets.STAGING_SUPABASE_JWT_SECRET }}
+          USERS: ${{ inputs.users }}
+        run: |
+          test -n "$BASE_URL" && test -n "$JWT_SECRET" || { echo "::error::Set STAGING_APP_URL (variable) and STAGING_SUPABASE_JWT_SECRET (secret) on the staging environment."; exit 1; }
+          case "$BASE_URL" in *staging*|*fly.dev*) ;; *) echo "::error::BASE_URL doesn't look like staging: $BASE_URL"; exit 1;; esac
+          k6 run --summary-export summary.json -e BASE_URL="$BASE_URL" -e JWT_SECRET="$JWT_SECRET" -e USERS="$USERS" "loadtest/k6/${{ inputs.scenario }}.js"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "k6-${{ inputs.scenario }}", path: summary.json }

@@ -1,0 +1,38 @@
+# Fly.io STAGING: image-analysis service. PRIVATE ONLY — reachable from the web app over Flycast
+# (http://<app>.flycast), never from the internet: allocate only a private IPv6 and no public IPs
+# (docs/STAGING_FLY.md). Flycast is HTTP-only, so no force_https. Requests also need VISION_API_KEY.
+app = "slabsentry-staging-vision"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  VISION_WORKERS = "2"   # 2 vCPU → 2 processes × 1 OpenCV thread
+  VISION_THREADS = "1"
+  VISION_CONCURRENCY = "1"
+  VISION_WARMUP = "1"    # OCR models load before the Machine passes its check
+
+[http_service]
+  internal_port = 8001
+  force_https = false
+  auto_stop_machines = "stop"   # scale to zero when idle (staging cost); queued jobs wait/retry while it boots
+  auto_start_machines = true
+  min_machines_running = 0
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 2   # each process runs one analysis at a time; extra stopped Machines start under load
+    hard_limit = 6
+
+  [[http_service.checks]]
+    grace_period = "40s"   # model warm-up
+    interval = "15s"
+    method = "GET"
+    timeout = "2s"
+    path = "/health"       # answers while an analysis runs (CPU work is off the event loop)
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

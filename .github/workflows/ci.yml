@@ -38,3 +38,17 @@ jobs:
           (.venv/bin/uvicorn app.main:app --port 8001 &) && sleep 5
       - run: pnpm --filter @slabguard/web test
         env: { FIXTURES_DIR: /tmp/fixtures, TEST_DATABASE_URL: "postgres://postgres@localhost:5432/slabguard_test" }
+  images:
+    # Proves both production images build on every push (they can't be built in the dev sandbox).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web/worker image
+        run: docker build -f Dockerfile.web -t slabsentry-web:ci --build-arg NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder .
+      - name: Build vision image
+        run: docker build -t slabsentry-vision:ci services/vision
+      - name: Smoke-test vision image (non-root, health answers)
+        run: |
+          docker run -d --name v -p 8001:8001 -e VISION_WARMUP=0 slabsentry-vision:ci
+          for i in $(seq 1 30); do curl -sf localhost:8001/health && break; sleep 1; done
+          test "$(docker exec v id -u)" != "0"

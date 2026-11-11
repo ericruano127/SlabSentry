@@ -32,6 +32,9 @@ createdb slabguard_test && pnpm --filter @slabguard/web test   # TEST_DATABASE_U
 
 AUTH_MODE=dev is ignored when `NODE_ENV=production`.
 
+### Staging on Fly.io
+See `docs/STAGING_FLY.md`. It covers `fly.staging.toml`, `services/vision/fly.staging.toml`, automatic deploys after CI, and manual k6 runs.
+
 ### Containers & Kubernetes (Phase F)
 - `Dockerfile.web`: one image for both web (`node apps/web/server.js`) and worker (`pnpm worker`). `docker compose up` runs the full stack; `docker compose --profile tools run migrate` applies migrations.
 - `deploy/k8s/slabguard.yaml`:

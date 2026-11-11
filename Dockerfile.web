@@ -8,6 +8,14 @@ COPY packages/core/package.json packages/core/
 RUN pnpm install --frozen-lockfile --filter @slabguard/web...
 
 FROM deps AS build
+# NEXT_PUBLIC_* values are compiled into the browser bundle, so they must be present at build time.
+# They are public by design (Supabase URL + anon key); pass them as build args, never secrets.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_AUTH_MODE=supabase
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL NEXT_PUBLIC_AUTH_MODE=$NEXT_PUBLIC_AUTH_MODE
 COPY . .
 RUN pnpm --filter @slabguard/web build
 

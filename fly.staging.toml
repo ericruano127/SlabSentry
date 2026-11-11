@@ -1,0 +1,62 @@
+# Fly.io STAGING: web/API + background workers (one image, two process groups).
+# App names are global on Fly; the deploy workflow overrides `app` with the FLY_WEB_APP variable if set.
+# One-time setup and secrets: docs/STAGING_FLY.md.
+app = "slabsentry-staging-web"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"     # let in-flight requests / the current analysis job finish
+
+[build]
+  dockerfile = "Dockerfile.web"
+  # NEXT_PUBLIC_* build args are passed by the deploy workflow (--build-arg) from GitHub variables.
+
+[deploy]
+  # Migrations run once per deploy, before any Machine is updated, over the DIRECT (non-pooled) URL.
+  release_command = "sh -c 'DATABASE_URL=${DIRECT_DATABASE_URL:-$DATABASE_URL} node_modules/.bin/tsx apps/web/scripts/migrate.ts'"
+  release_command_timeout = "5m"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  SERVICE_NAME = "slabsentry-staging-web"
+  INLINE_WORKER = "0"            # analyses run in the worker process group, never in web requests
+  DB_POOL_MAX = "10"             # measured best per process (docs/PERFORMANCE.md); PgBouncer in front
+  ALLOW_UNREVIEWED_LEGAL = "1"   # STAGING ONLY — production must not set this
+
+[processes]
+  app = "node apps/web/server.js"
+  worker = "node_modules/.bin/tsx apps/web/scripts/worker.ts"
+
+[http_service]
+  processes = ["app"]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200   # one process sustained ~900 rps at p99 < 0.8 s up to ~250 concurrent (docs/PERFORMANCE.md)
+    hard_limit = 300
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/ready"   # 503 when the database or reference library is unavailable
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  processes = ["worker"]   # I/O-bound: waits on the vision service
+
+
+# Metrics: /api/metrics requires METRICS_TOKEN, which Fly's built-in scraper can't send.
+# They are shipped to Grafana Cloud in the monitoring step instead.

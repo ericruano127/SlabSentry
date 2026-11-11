@@ -1,0 +1,73 @@
+name: deploy-staging
+# Deploys to Fly.io STAGING after CI passes on main (or manually). Skips cleanly until the
+# FLY_API_TOKEN secret exists. Setup: docs/STAGING_FLY.md.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false   # never interrupt a deploy (migrations run in release_command)
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      WEB_APP: ${{ vars.FLY_WEB_APP || 'slabsentry-staging-web' }}
+      VISION_APP: ${{ vars.FLY_VISION_APP || 'slabsentry-staging-vision' }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::notice::FLY_API_TOKEN is not set — skipping staging deploy (see docs/STAGING_FLY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          # deploy exactly the commit CI tested
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.cfg.outputs.ready == 'true'
+      - name: Deploy vision (private, Flycast)
+        if: steps.cfg.outputs.ready == 'true'
+        working-directory: services/vision
+        # --flycast: private IPv6 for http://<app>.flycast; --no-public-ips: never expose it to the internet
+        run: flyctl deploy --config fly.staging.toml --app "$VISION_APP" --remote-only --flycast --no-public-ips --wait-timeout 10m
+      - name: Deploy web + worker (runs migrations first)
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
+          APP_URL: ${{ vars.STAGING_APP_URL }}
+        run: |
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY" || { echo "::error::Set STAGING_SUPABASE_URL and STAGING_SUPABASE_ANON_KEY variables (docs/STAGING_FLY.md)."; exit 1; }
+          flyctl deploy --config fly.staging.toml --app "$WEB_APP" --remote-only --wait-timeout 10m \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --build-arg NEXT_PUBLIC_APP_URL="$APP_URL"
+      - name: Smoke test
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          APP_URL: ${{ vars.STAGING_APP_URL }}
+        run: |
+          URL="${APP_URL:-https://$WEB_APP.fly.dev}"
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /tmp/ready.json -w "%{http_code}" "$URL/api/ready") && [ "$code" = 200 ] && break; sleep 6
+          done
+          cat /tmp/ready.json; echo
+          test "$code" = 200
+          # the vision service must NOT be reachable from the internet
+          if curl -s --max-time 5 -o /dev/null "https://$VISION_APP.fly.dev/health"; then echo "::error::vision is publicly reachable"; exit 1; fi

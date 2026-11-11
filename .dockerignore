@@ -1,0 +1,15 @@
+# Keep build context small and secrets out of images.
+**/node_modules
+**/.next
+**/.turbo
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+apps/mobile
+services/vision/.venv
+services/vision/**/__pycache__
+loadtest/results
+docs/screenshots
+**/tsconfig.tsbuildinfo
