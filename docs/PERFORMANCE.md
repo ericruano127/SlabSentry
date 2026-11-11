@@ -62,6 +62,17 @@ Stress ramp, browse mix, one Node process, database pool 10, two runs each.
 - **OCR on the label region only (for cert extraction).** It saves 0.2 s but loses word spacing and the card name. Accuracy wins.
 - **Cheaper reference comparison (SIFT at lower resolution).** This is the largest single cost (about 0.6 s of 1.8 s per comparison). It changes the feature counts the copy-matching thresholds were tuned on, so it should only be tried with labeled genuine and counterfeit photos to re-validate against. The accuracy dashboard and release gate exist for exactly this.
 
+### Pages render per request (strict Content-Security-Policy)
+Every page now renders on each request so it can carry a fresh nonce (`docs/security/CSP.md`). Measured on one production process, 20 connections:
+
+| Page | Requests/s before → after | p50 before → after |
+|---|---|---|
+| `/` | 250 → 215 | 75 → 84 ms |
+| `/pricing` | 289 → 262 | 63 → 73 ms |
+| `/legal/terms` | 288 → 257 | 66 → 74 ms |
+
+About 10–14% fewer page renders per process and ~10 ms more per page. Pages were never CDN-cached (they always came from the app server), and the API, which carries most of the load, is unchanged.
+
 ## Re-running
 ```bash
 cd apps/web && npx vitest run test/queryBudget.test.ts

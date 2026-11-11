@@ -31,6 +31,8 @@ Synthetic fixtures (`services/vision/tests/synth.py`) generate cards sharing art
 | Out of credits | analysis is refused with an upgrade prompt, and no report starts |
 | Plans | signed out, "Start free" goes to sign-up; a free user's "Upgrade" asks checkout for the right monthly and annual price |
 | Account | "Download my data" downloads the zip; deleting the account (after typing DELETE) removes it |
+| Content-Security-Policy | fresh nonce on every page and every server-sent `<script>`; an injected script, event handler and `javascript:` link don't run; API responses locked down; **every test fails on any policy violation** |
+| Production build | CI also builds the production app and runs `e2e/production.e2e.ts` against it: the strict production policy, the signed-out pages, plans and a shared report, with no violations (`PROD_BASE_URL`, `--project production`) |
 
 **Limits:**
 - Sign-in uses the development test sign-in. Real Supabase sign-up (email confirmation, Google/Apple, two-factor) needs a Supabase project, so check it by hand on staging.

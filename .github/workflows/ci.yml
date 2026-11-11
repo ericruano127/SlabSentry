@@ -140,8 +140,36 @@ jobs:
       - name: Browser tests
         working-directory: apps/web
         run: pnpm exec playwright test
+      - name: Production build (strict Content-Security-Policy; dev sign-in off)
+        working-directory: apps/web
+        env: # placeholders only: lets the production server start; no real service is called
+          AUTH_MODE: ""
+          NEXT_PUBLIC_AUTH_MODE: ""
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          VISION_API_KEY: ci-placeholder
+          CERT_HASH_SECRET: ci-placeholder-ci-placeholder-ci-placeholder
+          ALLOW_UNREVIEWED_LEGAL: "1"
+        run: |
+          pnpm exec next build
+          NODE_ENV=production nohup pnpm exec next start -p 3100 > /tmp/next-prod.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:3100/api/health && break; sleep 2; done
+      - name: Browser tests (production build)
+        working-directory: apps/web
+        env:
+          AUTH_MODE: ""
+          NEXT_PUBLIC_AUTH_MODE: ""
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          VISION_API_KEY: ci-placeholder
+          CERT_HASH_SECRET: ci-placeholder-ci-placeholder-ci-placeholder
+          ALLOW_UNREVIEWED_LEGAL: "1"
+          PROD_BASE_URL: http://localhost:3100
+        run: pnpm exec playwright test --project production
       - if: failure()
-        run: tail -100 /tmp/next.log; tail -50 /tmp/vision.log
+        run: tail -100 /tmp/next.log; tail -50 /tmp/vision.log; tail -50 /tmp/next-prod.log || true
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: e2e-report, path: /tmp/e2e-out, retention-days: 7 }

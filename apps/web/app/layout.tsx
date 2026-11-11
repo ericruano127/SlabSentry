@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Link from "next/link";
+import { connection } from "next/server";
 import { ConsentGate } from "@/components/ConsentGate";
 import { Nav } from "@/components/Nav";
 import { VersionLink } from "@/components/VersionLink";
@@ -12,7 +13,9 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#3b5bdb" };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Render every page per request so each gets a fresh Content-Security-Policy nonce (proxy.ts).
+  await connection();
   return (
     <html lang="en">
       <body>

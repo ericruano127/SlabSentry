@@ -91,6 +91,7 @@ The exact suffixes depend on Grafana's OTLP translation settings. If a panel is 
 | DbQueriesPerRequestRegression | Average round-trips per request above 6 | info |
 | RateLimitSpike | More than 5 rate-limited requests per second | info |
 | AuthFailureSpike | More than 1 auth failure per second for 10 minutes (token stuffing or probing) | warning |
+| CspViolations | More than 20 Content-Security-Policy blocks of one kind in 15 minutes, for 15 minutes (the policy may be blocking something legitimate) | info |
 | StaffRoleChanged | Any staff role assignment | info |
 
 `ALERT_WEBHOOK_URL` (an immediate post for each new error type) still works alongside these.
@@ -127,6 +128,6 @@ Docker Compose, Kubernetes and Fly already use this command, and CI checks the p
 - one analysis is one trace across worker and analysis service;
 - database, Redis and fetch spans are present in the production Next.js build and in the ES-module worker;
 - probes are filtered, and nothing leaks;
-- all 35 PromQL expressions in the dashboard and rules parse.
+- all 36 PromQL expressions in the dashboard and rules parse.
 
 **Not verified:** the connection to a real Grafana Cloud stack. Grafana isn't reachable from the development sandbox, so metric-name suffixes and the rule import should be checked on first use.

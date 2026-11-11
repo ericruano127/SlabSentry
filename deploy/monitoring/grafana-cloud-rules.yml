@@ -68,6 +68,14 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations: { summary: "Unusual auth failures ({{ $labels.reason }}) on {{ $labels.job }}" }
+      - alert: CspViolations
+        # Browsers reporting Content-Security-Policy blocks. A steady stream right after a deploy usually
+        # means the policy (apps/web/lib/csp.ts) blocks something legitimate; scattered reports are often
+        # browser extensions. Details: "csp violation" log lines.
+        expr: sum by (job, directive) (increase(slabguard_csp_violations_total[15m])) > 20
+        for: 15m
+        labels: { severity: info }
+        annotations: { summary: "Content-Security-Policy is blocking {{ $labels.directive }} on {{ $labels.job }} (check the csp violation logs)" }
       - alert: StaffRoleChanged
         # Every staff role assignment notifies the team (details in the admin audit log).
         expr: sum by (job, role) (increase(slabguard_admin_role_changes_total[10m])) > 0

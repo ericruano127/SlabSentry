@@ -24,7 +24,7 @@ Items marked **(manual)** are account settings this repository cannot change its
 - [x] Row-level security on all tables; private storage; images served only to their owner; share links exclude photos and personal data.
 - [x] Rate limiting on create/upload/analyze/export/checkout; verified idempotent webhooks.
 - [x] Security headers: HSTS, CSP, frame-ancestors none, nosniff, referrer policy, permissions policy.
-- [ ] Tighten CSP with nonces (remove `'unsafe-inline'` for scripts).
+- [x] Strict Content-Security-Policy with a fresh nonce per page view (`apps/web/proxy.ts`, `lib/csp.ts`): no `'unsafe-inline'` or `'unsafe-eval'` for scripts, `'strict-dynamic'`, `<style>` elements need the nonce, `object-src`/`frame-src` none, `base-uri` none, exact Supabase origin only (no wildcard). API responses get `default-src 'none'`. Violations are reported to `/api/csp-report` (metric + `CspViolations` alert). See `docs/security/CSP.md`.
 - [ ] Malware scanning for uploads if file types beyond images/videos are ever accepted (current types are decoded and re-validated).
 
 ## Monitoring & response (Phase F completes)

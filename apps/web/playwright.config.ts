@@ -26,7 +26,10 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "phone", use: { ...devices["Pixel 7"] }, grep: /@phone/ },
+    // Development server (test sign-in): every flow.
+    { name: "desktop", use: { ...devices["Desktop Chrome"] }, testIgnore: /production\.e2e\.ts/ },
+    { name: "phone", use: { ...devices["Pixel 7"] }, grep: /@phone/, testIgnore: /production\.e2e\.ts/ },
+    // Production build, only when PROD_BASE_URL is set: the strict production Content-Security-Policy.
+    ...(process.env.PROD_BASE_URL ? [{ name: "production", use: { ...devices["Desktop Chrome"], baseURL: process.env.PROD_BASE_URL }, testMatch: /production\.e2e\.ts/ }] : []),
   ],
 });

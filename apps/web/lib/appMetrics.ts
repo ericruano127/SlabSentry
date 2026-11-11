@@ -20,6 +20,7 @@ export const appMetrics = {
   errors: meter.createCounter("slabguard.errors", { description: "Unexpected errors (5xx, failed jobs)" }), // [slabguard_errors_total]
   rateLimited: meter.createCounter("slabguard.rate_limited", { description: "Requests rejected by rate limits" }), // [slabguard_rate_limited_total]
   authFailures: meter.createCounter("slabguard.auth.failures", { description: "Rejected sign-in tokens and staff permission denials" }), // [slabguard_auth_failures_total{reason}]
+  cspViolations: meter.createCounter("slabguard.csp.violations", { description: "Content-Security-Policy violation reports from browsers" }), // [slabguard_csp_violations_total{directive}]
   roleChanges: meter.createCounter("slabguard.admin.role_changes", { description: "Staff role assignments (also in the admin audit log)" }), // [slabguard_admin_role_changes_total{role}]
   analyses: meter.createCounter("slabguard.analyses", { description: "Analysis jobs finished, by outcome" }), // [slabguard_analyses_total{outcome}]
   analysisDuration: meter.createHistogram("slabguard.analysis.duration", {

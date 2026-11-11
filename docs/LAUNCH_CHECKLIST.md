@@ -66,7 +66,7 @@ Everything between now and a public launch, in rough order. Last updated 2026-11
 | ✅ | Internal security and code review (8 findings fixed) | Claude | `docs/security/REVIEW_2026-11-11.md` |
 | 🟡 | GitHub: 2FA required, branch protection on `main` (PR + review + required checks), push protection on | You | `docs/security/HARDENING_CHECKLIST.md` |
 | 🟡 | 2FA on every provider account (Fly, Supabase, Stripe, RevenueCat, Apple, Google, Grafana, domain registrar, email) | You | Same file |
-| ⬜ | Tighten the Content-Security-Policy with nonces (remove `'unsafe-inline'` scripts) | Claude | Same file |
+| ✅ | Strict Content-Security-Policy with per-request nonces (no inline or eval scripts); tested against injected scripts, in development and a production build | Claude | `docs/security/CSP.md` |
 | ⛔ | **Third-party penetration test** (web, API, mobile, storage permissions), with findings fixed | Pen-test firm | Same file |
 
 ## 7. Performance and reliability
