@@ -84,6 +84,12 @@ Everything between now and a public launch, in rough order. Last updated 2026-11
 | ✅ | Browser end-to-end tests of the main flows in CI (sign up, scan → report → share, out of credits, plans, account; desktop + phone) | Claude | `docs/TESTING.md` § Browser tests |
 | ✅ | CI upkeep: actions updated off deprecated Node 20, all pinned to commit SHAs (Fly.io step no longer tracks `master`), grouped Dependabot updates | Claude | `.github/workflows/`, `docs/security/HARDENING_CHECKLIST.md` |
 
+## 9. Manual testing on staging
+| | Item | Owner | Details |
+|---|---|---|---|
+| ⬜ | Smoke test (★ tests) after each staging deploy you care about | You | `docs/MANUAL_TEST_PLAN.md` |
+| ⬜ | Full manual pass on desktop, iPhone and Android; blockers and majors fixed and re-tested | You (+ a second tester) | `docs/MANUAL_TEST_PLAN.md` |
+
 ## Launch day
 1. Legal approved, then deploy production (approval, blue-green, smoke test).
 2. Check Grafana: API errors, analysis queue, workers reporting.

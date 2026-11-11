@@ -1,5 +1,7 @@
 # Testing & Accuracy
 
+For hand testing on staging (real sign-in, purchases, phones, screen readers), see `docs/MANUAL_TEST_PLAN.md`.
+
 ## Automated suites
 | Suite | Command | Covers |
 |---|---|---|
