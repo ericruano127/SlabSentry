@@ -9,7 +9,7 @@ const pct = (x: number | null) => (x == null ? "—" : `${(x * 100).toFixed(1)}%
 
 function MetricsTable({ title, groups }: { title: string; groups: Record<string, any> }) {
   return (
-    <div className="scroll-x"><h3>{title}</h3>
+    <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><h3>{title}</h3>
       <table className="table small"><thead><tr><th>Group</th><th>n</th><th>Missed fakes</th><th>Missed-fake rate</th><th>False flags</th><th>False-flag rate</th><th>Weak catches</th><th>Over-cautious</th><th>Abstained</th><th>Weighted cost</th></tr></thead>
         <tbody>{Object.entries(groups).map(([k, m]) => (
           <tr key={k}><td>{k}</td><td>{m.n}</td><td style={{ color: m.missedFakes ? "var(--bad)" : undefined }}>{m.missedFakes}</td><td>{pct(m.missedFakeRate)}</td><td>{m.falseFlags}</td><td>{pct(m.falseFlagRate)}</td><td>{m.weakCatches}</td><td>{m.overCautious}</td><td>{m.abstained}</td><td>{m.weightedCost}</td></tr>
@@ -85,7 +85,7 @@ export default function Quality() {
           <input aria-label="Description" placeholder="Description (internal only)" value={t.description} onChange={(e) => setT({ ...t, description: e.target.value })} />
         </div>
         <button className="btn" disabled={t.title.length < 3 || t.description.length < 10 || t.source.length < 3} onClick={() => act(() => api("/api/admin/techniques", { method: "POST", json: { ...t, graders: t.graders.split(",").map((x) => x.trim()).filter(Boolean) } }), "Technique logged.", tech.reload)}>Log technique</button>
-        <div className="scroll-x"><table className="table small"><thead><tr><th>Technique</th><th>Graders</th><th>Status</th><th>Mitigated in</th><th>Updated</th></tr></thead>
+        <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table className="table small"><thead><tr><th>Technique</th><th>Graders</th><th>Status</th><th>Mitigated in</th><th>Updated</th></tr></thead>
           <tbody>{(tech.data?.techniques ?? []).map((x: any) => (
             <tr key={x.id}><td>{x.title}<div className="muted">{x.source}</div></td><td>{x.graders.join(", ")}</td>
               <td><select aria-label="Status" value={x.status} onChange={(e) => act(() => api("/api/admin/techniques", { method: "PATCH", json: { id: x.id, status: e.target.value } }), "Updated.", tech.reload)}>{["reported", "confirmed", "mitigated", "not_reproducible"].map((s) => <option key={s}>{s}</option>)}</select></td>
@@ -103,7 +103,7 @@ export default function Quality() {
           <textarea aria-label="Internal notes" rows={4} placeholder="Internal: what changed, why, data used" value={r.internalNotes} onChange={(e) => setR({ ...r, internalNotes: e.target.value })} />
         </div>
         <button className="btn" disabled={!r.version || r.publicNotes.length < 10 || r.internalNotes.length < 20} onClick={() => act(() => api("/api/admin/releases", { method: "POST", json: r }), "Draft created with accuracy evaluation.", rel.reload)}>Create draft release</button>
-        <div className="scroll-x"><table className="table small"><thead><tr><th>Version</th><th>Status</th><th>Gate</th><th>Missed fakes / false flags (n)</th><th>Public notes</th><th></th></tr></thead>
+        <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table className="table small"><thead><tr><th>Version</th><th>Status</th><th>Gate</th><th>Missed fakes / false flags (n)</th><th>Public notes</th><th></th></tr></thead>
           <tbody>{(rel.data?.releases ?? []).map((x: any) => (
             <tr key={x.id}><td>{x.version}</td><td><Pill tone={x.status === "published" ? "ok" : "warn"}>{x.status}</Pill></td>
               <td><Pill tone={x.gate?.pass ? "ok" : "bad"}>{x.gate?.pass ? "pass" : "regression"}</Pill>{x.gate_override_reason && <div className="muted">override: {x.gate_override_reason}</div>}{!x.gate?.pass && <div className="muted">{x.gate?.reasons?.join(" ")}</div>}</td>

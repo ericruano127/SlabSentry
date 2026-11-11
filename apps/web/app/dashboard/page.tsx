@@ -40,7 +40,7 @@ export default function Dashboard() {
       <section className="card">
         <div className="row spread"><h2>Recent verifications</h2><Link href="/history" className="small">All</Link></div>
         {list.data?.sessions.length ? (
-          <div className="scroll-x"><table className="table">
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table className="table">
             <thead><tr><th>Slab</th><th>Assessment</th><th>Date</th></tr></thead>
             <tbody>{list.data.sessions.slice(0, 6).map((s) => (
               <tr key={s.id}><td><Link href={s.status === "draft" ? `/scan?session=${s.id}` : `/sessions/${s.id}`}>{s.title ?? (s.cert_number ? `${s.grader ?? ""} ${s.cert_number}` : "Draft scan")}</Link></td><td><AssessmentPill value={s.overall_assessment} /></td><td className="small muted">{fmtDate(s.created_at)}</td></tr>

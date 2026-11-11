@@ -1,7 +1,7 @@
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --text: #12151b; --muted: #5b6474; --border: #e3e6eb;
   --accent: #3b5bdb; --accent-2: #5c7cfa; --accent-ink: #ffffff;
-  --ok: #1f8a4c; --ok-bg: #e6f6ec; --warn: #a15c00; --warn-bg: #fff4e0; --bad: #b42318; --bad-bg: #fdecea; --mute-bg: #eef0f3;
+  --ok: #15703c; --ok-bg: #e6f6ec; --warn: #a15c00; --warn-bg: #fff4e0; --bad: #b42318; --bad-bg: #fdecea; --mute-bg: #eef0f3;
   --radius: 14px; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
   color-scheme: light;
 }
@@ -17,6 +17,9 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 a { color: var(--accent); text-decoration: none; }
+/* Links inside text must not rely on colour alone (WCAG 1.4.1): underline them. Nav links and buttons keep their own styling. */
+:where(p, li, dd, td, label, .small, .muted, .banner, .card > div) a:not(.btn):not(.pill) { text-decoration: underline; text-underline-offset: 2px; }
+.scroll-x:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 a:hover { text-decoration: underline; }
 h1 { font-size: 1.7rem; letter-spacing: -0.02em; margin: 0 0 .25rem; }
 h2 { font-size: 1.15rem; margin: 0 0 .75rem; }
@@ -91,3 +94,9 @@ label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; 
 .region { position: absolute; border: 2px solid var(--bad); border-radius: 4px; box-shadow: 0 0 0 9999px transparent; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .btn.small { min-height: 36px; padding: 4px 12px; font-size: .85rem; }
+
+/* Accessibility helpers */
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 10px 14px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 650; text-decoration: none; }
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; } /* focused only as the skip-link target */
+h2.h3 { font-size: 1rem; margin: 0 0 .5rem; } /* h2 for document structure, h3 size for card titles */

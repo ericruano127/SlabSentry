@@ -206,7 +206,7 @@ export function LiveCamera({ visible, mode, target, label, onCapture, onClose, o
         </View>
         <View style={s.hints} accessibilityLiveRegion="polite">
           <Pill text={label} bg="rgba(0,0,0,.6)" />
-          {hints.map((h) => <Pill key={h.key} text={h.text} bg={h.ok ? "rgba(31,138,76,.9)" : "rgba(180,35,24,.9)"} />)}
+          {hints.map((h) => <Pill key={h.key} text={h.text} bg={h.ok ? "rgba(21,112,60,.95)" : "rgba(180,35,24,.9)"} />)}
           {!analysis && <Pill text="Starting guidance…" bg="rgba(0,0,0,.6)" />}
         </View>
         {mode === "video" && (

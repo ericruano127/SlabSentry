@@ -42,11 +42,13 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@types/node": "^22.19.1",
     "@types/pg": "^8.15.6",
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "autocannon": "^9.0.0",
+    "playwright": "1.63.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

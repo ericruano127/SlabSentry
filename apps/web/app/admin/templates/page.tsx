@@ -71,7 +71,7 @@ function Coverage({ rows, kinds, canSubmit, onAdd }: { rows: any[]; kinds: strin
   const total = rows.length * kinds.length;
   const covered = rows.reduce((n, r) => n + kinds.filter((k) => r.kinds[k].active > 0).length, 0);
   return (
-    <section className="card stack scroll-x" aria-labelledby="cov-h">
+    <section className="card stack scroll-x" tabIndex={0} aria-labelledby="cov-h">
       <div className="row spread"><h2 id="cov-h">Coverage</h2><span className="small muted">{covered} of {total} generation × check combinations have an approved template</span></div>
       <table className="table small">
         <thead><tr><th>Grader</th><th>Holder generation</th>{kinds.map((k) => <th key={k}>{KIND_LABEL[k]}</th>)}</tr></thead>
@@ -227,7 +227,7 @@ function Library({ d, onDone }: { d: any; onDone: (tone: string, text: string) =
   const [open, setOpen] = useState<string | null>(null);
   const rows = d.templates.filter((x: any) => (!status || x.status === status) && (!gen || x.generation_id === gen));
   return (
-    <section className="card stack scroll-x" aria-labelledby="lib-h">
+    <section className="card stack scroll-x" tabIndex={0} aria-labelledby="lib-h">
       <h2 id="lib-h">All templates</h2>
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: "auto" }}><option value="">All statuses</option>{Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>

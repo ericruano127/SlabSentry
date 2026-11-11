@@ -60,7 +60,7 @@ export default function Bulk() {
       <div className="row spread"><h1>Bulk verification</h1><span className="pill">{me.data.usage.totalRemaining} verifications available</span></div>
       <p className="muted small">Add one row per slab. Each slab uses one credit when its report is delivered. Analyses run in priority order; open each report from History when it completes.</p>
       {err && <div className="banner bad">{err}</div>}
-      <div className="card scroll-x">
+      <div className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table">
         <table className="table">
           <thead><tr><th>#</th>{ROLES.map(([, , l]) => <th key={l}>{l}</th>)}<th>Status</th></tr></thead>
           <tbody>

@@ -27,7 +27,7 @@ export default function History() {
         {batch ? <button className="btn" disabled={!sel.size} onClick={() => download("/api/reports/batch", "slab-reports.pdf", { method: "POST", json: { ids: [...sel] } }).catch((e) => setErr(e.message))}>Batch PDF ({sel.size})</button> : null}
       </div>
       {err && <div className="banner bad">{err}</div>}
-      <div className="card scroll-x">
+      <div className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table">
         <table className="table">
           <thead><tr>{batch && <th><span className="sr-only">Select</span></th>}<th>Slab</th><th>Mode</th><th>Assessment</th><th>Credit</th><th>Date</th></tr></thead>
           <tbody>{list.data?.sessions.map((s) => (

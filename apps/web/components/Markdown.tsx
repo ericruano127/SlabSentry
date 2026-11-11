@@ -7,14 +7,14 @@ export function Markdown({ text }: { text: string }) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (/^#{1,3} /.test(l)) { const n = l.match(/^#+/)![0].length + 1; out.push(`<h${n}>${inline(l.replace(/^#+ /, ""))}</h${n}>`); }
+    if (/^#{1,3} /.test(l)) { const n = Math.max(2, l.match(/^#+/)![0].length); /* page owns the h1: "## Section" → h2, no skipped levels */ out.push(`<h${n}>${inline(l.replace(/^#+ /, ""))}</h${n}>`); }
     else if (l.startsWith("> ")) out.push(`<div class="banner warn" style="margin:8px 0">${inline(l.slice(2))}</div>`);
     else if (/^- /.test(l)) { const items: string[] = []; while (i < lines.length && /^- /.test(lines[i])) items.push(`<li>${inline(lines[i++].slice(2))}</li>`); i--; out.push(`<ul>${items.join("")}</ul>`); }
     else if (l.startsWith("|")) {
       const rows: string[][] = [];
       while (i < lines.length && lines[i].startsWith("|")) { const cells = lines[i++].split("|").slice(1, -1).map((c) => c.trim()); if (!cells.every((c) => /^-+$/.test(c))) rows.push(cells); }
       i--;
-      out.push(`<div class="scroll-x"><table class="table small"><thead><tr>${rows[0].map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      out.push(`<div class="scroll-x" tabindex="0" role="region" aria-label="Table"><table class="table small"><thead><tr>${rows[0].map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
     } else if (l.trim()) out.push(`<p>${inline(l)}</p>`);
   }
   return <div dangerouslySetInnerHTML={{ __html: out.join("\n") }} />;

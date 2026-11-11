@@ -64,3 +64,34 @@ jobs:
           for i in $(seq 1 60); do curl -sf localhost:8001/health && { ok=1; break; }; sleep 2; done
           [ -n "$ok" ] || { docker logs vision-ci; echo "::error::vision health never answered"; exit 1; }
           uid="$(docker exec vision-ci id -u)"; echo "runs as uid $uid"; test "$uid" != "0"
+  accessibility:
+    # WCAG 2.2 A/AA (axe-core) + keyboard walk on every page, light/dark, desktop/phone, signed out/in/staff.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_HOST_AUTH_METHOD: trust, POSTGRES_DB: slabguard_a11y }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/slabguard_a11y
+      AUTH_MODE: dev
+      NEXT_PUBLIC_AUTH_MODE: dev
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @slabguard/web db:migrate
+      - run: pnpm --filter @slabguard/web exec playwright install --with-deps chromium
+      - name: Start the app (development mode, test sign-in)
+        run: |
+          (cd apps/web && nohup npx next dev -p 3000 > /tmp/next.log 2>&1 &)
+          for i in $(seq 1 90); do curl -sf localhost:3000/api/health && break; sleep 2; done
+      - name: Accessibility audit
+        working-directory: apps/web
+        run: node scripts/a11y-audit.mjs --make-admin
+      - if: failure()
+        run: tail -100 /tmp/next.log

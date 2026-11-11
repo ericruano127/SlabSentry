@@ -98,7 +98,7 @@ export function LiveCamera({ mode, label, onCapture, onClose, target = "slab" }:
         <div aria-hidden style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", height: "82%", aspectRatio: mode === "video" ? "1.6" : "0.62", border: `3px solid ${ready ? "#4ade80" : "rgba(255,255,255,.7)"}`, borderRadius: 12 }} />
         <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", flexWrap: "wrap", gap: 6 }} aria-live="polite">
           <span className="pill" style={{ background: "rgba(0,0,0,.6)", color: "#fff" }}>{label}</span>
-          {hints.map((h) => <span key={h.text} className="pill" style={{ background: h.ok ? "rgba(31,138,76,.85)" : "rgba(180,35,24,.85)", color: "#fff" }}>{h.text}</span>)}
+          {hints.map((h) => <span key={h.text} className="pill" style={{ background: h.ok ? "rgba(21,112,60,.95)" : "rgba(180,35,24,.85)", color: "#fff" }}>{h.text}</span>)}
         </div>
         {err && <div className="banner bad" style={{ position: "absolute", bottom: 90, left: 12, right: 12 }}>{err}</div>}
         {mode === "video" && <p style={{ position: "absolute", bottom: 90, left: 0, right: 0, textAlign: "center", color: "#fff" }}>{recording ? `Slowly tilt the slab… ${recording}` : "Frame the label, then tilt the slab slowly (~30°) for 4 seconds under one light."}</p>}

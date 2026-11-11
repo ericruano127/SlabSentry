@@ -16,9 +16,9 @@ export default function Home() {
         <p className="small muted" style={{ marginTop: 10 }}>No credit card required.</p>
       </section>
       <div className="grid grid-3">
-        <div className="card"><h3>Same card — or same physical copy?</h3><p className="muted">A valid cert number isn't enough. We align your card to the grader's image and compare cut, centering and surface details.</p></div>
-        <div className="card"><h3>Holder inspection</h3><p className="muted">Generation-aware checks for labels, codes, edges and light-reactive elements — older genuine slabs aren't penalized for lacking newer features.</p></div>
-        <div className="card"><h3>Honest about limits</h3><p className="muted">Photos alone can't guarantee authenticity. Reports say what was verified, what was inferred, and what's still uncertain.</p></div>
+        <div className="card"><h2 className="h3">Same card — or same physical copy?</h2><p className="muted">A valid cert number isn't enough. We align your card to the grader's image and compare cut, centering and surface details.</p></div>
+        <div className="card"><h2 className="h3">Holder inspection</h2><p className="muted">Generation-aware checks for labels, codes, edges and light-reactive elements — older genuine slabs aren't penalized for lacking newer features.</p></div>
+        <div className="card"><h2 className="h3">Honest about limits</h2><p className="muted">Photos alone can't guarantee authenticity. Reports say what was verified, what was inferred, and what's still uncertain.</p></div>
       </div>
     </>
   );

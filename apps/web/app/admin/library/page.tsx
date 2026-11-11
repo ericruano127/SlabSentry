@@ -38,7 +38,7 @@ export default function LibraryAdmin() {
           <div className="small">{c.categories.length} categories · {c.graders.length} graders · {c.generations.length} holder generations · {c.features.length} features · {c.certRanges.length} verified cert ranges</div></div>
       </div>
 
-      <section className="card scroll-x">
+      <section className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table">
         <h2>Categories & graders</h2>
         <table className="table small"><thead><tr><th>Category</th><th>Status</th><th>Graders</th><th>Checks</th></tr></thead>
           <tbody>{c.categories.map((cat: any) => (
@@ -49,7 +49,7 @@ export default function LibraryAdmin() {
         <p className="small muted">* research needed — official documentation not yet confirmed.</p>
       </section>
 
-      <section className="card scroll-x">
+      <section className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table">
         <h2>Releases</h2>
         <table className="table small"><thead><tr><th>Version</th><th>Status</th><th>Hash</th><th>Published</th><th>Notes</th><th></th></tr></thead>
           <tbody>{releases.map((r: any) => (

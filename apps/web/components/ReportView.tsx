@@ -95,7 +95,7 @@ function QuickSummaryCard({ q, sessionId }: { q: any; sessionId?: string }) {
 function ImageQualityTable({ rows }: { rows: any[] }) {
   const ISSUE: Record<string, string> = { blur: "Blurry", motion_blur: "Motion blur", label_blur: "Label soft", glare: "Glare", low_resolution: "Low resolution", underexposed: "Too dark", overexposed: "Too bright", edges_cut_off: "Edges cut off", steep_angle: "Angled", subject_too_small: "Too small", too_few_frames: "Few distinct frames" };
   return (
-    <section className="card scroll-x" aria-labelledby="iq">
+    <section className="card scroll-x" tabIndex={0} aria-labelledby="iq">
       <h2 id="iq">Photo quality</h2>
       <table className="table small">
         <thead><tr><th>Photo</th><th>Quality</th><th>Issues</th><th>Limited these checks</th></tr></thead>

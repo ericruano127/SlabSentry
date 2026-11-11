@@ -16,6 +16,9 @@
 
 Synthetic fixtures (`services/vision/tests/synth.py`) generate cards sharing artwork but differing in cut and surface marks — they validate logic, **not real-world accuracy**.
 
+## Accessibility
+`apps/web/scripts/a11y-audit.mjs`: WCAG 2.2 A/AA (axe-core) plus a keyboard walk on every page, in light/dark and desktop/phone, signed out, signed in and as staff. Runs in CI (`accessibility` job) and fails on any violation. See `docs/ACCESSIBILITY.md`.
+
 ## Load, stress & capacity
 Reduced-scale autocannon runs and the analysis-throughput benchmark: `loadtest/local/` (results in `loadtest/results/`).
 Full 10,000-user k6 suites for staging: `loadtest/k6/`. Results, breaking point and capacity model: `docs/SCALING.md`.

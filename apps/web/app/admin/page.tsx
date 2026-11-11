@@ -35,8 +35,8 @@ export default function Admin() {
       <p className="small muted">Internal only. {d.costs.note} · <a href="/admin/library">Reference library →</a> · <a href="/admin/templates">Verified templates & market data →</a> · <a href="/admin/quality">Quality & releases →</a></p>
       <div className="grid grid-3">{tiles.map(([k, v]) => <div key={k} className="card"><div className="small muted">{k}</div><div className="stat" style={{ fontSize: "1.5rem" }}>{v}</div></div>)}</div>
       <div className="grid grid-2">
-        <section className="card scroll-x"><h2>Verifications by plan</h2><table className="table small"><thead><tr><th>Plan</th><th>Sessions</th><th>Billable</th><th>Failed</th></tr></thead><tbody>{d.verifications.byPlan.map((r: any) => <tr key={r.plan_id}><td>{r.plan_id}</td><td>{r.sessions}</td><td>{r.billable}</td><td>{r.failed}</td></tr>)}</tbody></table></section>
-        <section className="card scroll-x"><h2>Average cost per verification</h2><table className="table small"><tbody>
+        <section className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><h2>Verifications by plan</h2><table className="table small"><thead><tr><th>Plan</th><th>Sessions</th><th>Billable</th><th>Failed</th></tr></thead><tbody>{d.verifications.byPlan.map((r: any) => <tr key={r.plan_id}><td>{r.plan_id}</td><td>{r.sessions}</td><td>{r.billable}</td><td>{r.failed}</td></tr>)}</tbody></table></section>
+        <section className="card scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><h2>Average cost per verification</h2><table className="table small"><tbody>
           <tr><td>Compute (vision)</td><td>{usd(d.costs.avgCompute)}</td></tr><tr><td>OCR</td><td>{usd(d.costs.avgOcr)}</td></tr><tr><td>Image search</td><td>{usd(d.costs.avgImageSearch)}</td></tr>
           <tr><td>AI</td><td>{usd(d.costs.avgAi)}</td></tr><tr><td>Storage</td><td>{usd(d.costs.avgStorage)}</td></tr></tbody></table></section>
       </div>

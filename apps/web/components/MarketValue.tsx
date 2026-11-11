@@ -35,7 +35,7 @@ export function MarketValue({ sessionId, assessment }: { sessionId: string; asse
       ) : null}
       <p className="small muted">{v.note} Market value is shown for context and never changes the authenticity findings.</p>
       {m.data.comps.length > 0 && (
-        <div className="scroll-x"><table className="table small"><thead><tr><th>Sold</th><th>Price</th><th>Grade</th><th>Source</th><th></th></tr></thead>
+        <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table className="table small"><thead><tr><th>Sold</th><th>Price</th><th>Grade</th><th>Source</th><th></th></tr></thead>
           <tbody>{m.data.comps.map((c: any) => (
             <tr key={c.id}><td>{c.sold_at ?? "—"}</td><td>{money(c.price_cents, c.currency)}</td><td>{c.grade_label ?? "—"}</td><td>{c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer nofollow">{c.source}</a> : c.source}</td>
               <td><button className="btn" style={{ minHeight: 30, padding: "2px 8px" }} aria-label="Remove sale" onClick={async () => { await api(`/api/sessions/${sessionId}/comps`, { method: "DELETE", json: { compId: c.id } }); m.reload(); }}>✕</button></td></tr>
