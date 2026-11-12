@@ -10,6 +10,12 @@ What to test by hand on **staging**, on the website and the mobile apps, before 
 
 The automated suites (`docs/TESTING.md`) already check the logic on every push. This plan checks the real thing end to end.
 
+**Record results in the shared checklist:** https://claude.ai/artifact/1EPoj6cgtQMo5MF5KwUiJn
+- Start a run for your device, then mark each test Pass, Fail or Blocked, with a note or bug link. Everyone's results show live.
+- **Copy failures** gives a ready-to-paste list of a run's failed and blocked tests.
+- To get in, ask the owner to share it with you at **Contributor** access, and sign in to claude.ai.
+- The checklist copies the tests from this document. When this document changes, update the checklist to match. Results are kept by test ID.
+
 ## Two kinds of run
 - **Smoke test** (about 30 minutes): after every staging deploy you care about. Run the tests marked **★**.
 - **Full pass** (one to two days, ideally two people): before launch, and again after any big change. Run everything.
