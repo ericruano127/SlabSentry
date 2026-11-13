@@ -56,9 +56,10 @@ Everything between now and a public launch, in rough order. Last updated 2026-11
 ## 5. Mobile apps
 | | Item | Owner | Details |
 |---|---|---|---|
-| ⬜ | Development build on real devices; live-camera checklist (one newer and one older device per platform) | You | `docs/MOBILE_CAMERA.md` |
+| ⬜ | Staging build on real devices; live-camera checklist (one newer and one older device per platform) | You | `docs/MOBILE_CAMERA.md`, `docs/MOBILE_BUILDS.md` |
 | ⬜ | Apple Developer + Google Play accounts; app records, icons, screenshots, review notes | You | Store consoles |
-| ⬜ | Point the app config at production (`apps/mobile/app.json` `extra`) | You | `apps/mobile/app.json` |
+| ✅ | Build setup: development, staging and production builds with their own app IDs; server settings from EAS environment variables; builds refuse missing or non-https settings | Claude | `docs/MOBILE_BUILDS.md` |
+| ⬜ | Expo account, `eas init`, staging and production environment variables, Supabase redirect `slabguard-staging://**`; first staging build installed on an Android phone and an iPhone | You | `docs/MOBILE_BUILDS.md` |
 
 ## 6. Security
 | | Item | Owner | Details |

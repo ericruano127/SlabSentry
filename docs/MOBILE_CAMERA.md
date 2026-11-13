@@ -44,7 +44,7 @@ npx expo run:ios
 npx expo run:android
 ```
 
-EAS Build works as well (`eas build --profile development`). Camera permission strings are already in `app.json`. No microphone permission is needed because audio is off.
+EAS Build works as well (`eas build --profile development`); for testers, use the staging build. Both are described in `docs/MOBILE_BUILDS.md`. Camera permission strings are already in `app.json`. No microphone permission is needed because audio is off.
 
 ## Verified here vs. on devices
 **Verified in this environment:**

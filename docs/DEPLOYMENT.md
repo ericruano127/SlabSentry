@@ -13,7 +13,7 @@ pnpm db:migrate                             # applies SQL migrations, seeds plan
 pnpm dev:vision                             # :8001
 pnpm dev:web                                # :3000 (inline job worker in dev)
 ```
-Mobile: `cd apps/mobile && EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000 EXPO_PUBLIC_SUPABASE_URL=... EXPO_PUBLIC_SUPABASE_ANON_KEY=... npx expo start` (development build required for RevenueCat, Apple sign-in and the live camera — Expo Go is not supported: `npx expo prebuild && npx expo run:ios|android` or EAS; see `docs/MOBILE_CAMERA.md`).
+Mobile: `cd apps/mobile && EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000 EXPO_PUBLIC_SUPABASE_URL=... EXPO_PUBLIC_SUPABASE_ANON_KEY=... npx expo start` (development build required for RevenueCat, Apple sign-in and the live camera — Expo Go is not supported: `npx expo prebuild && npx expo run:ios|android` or EAS; see `docs/MOBILE_BUILDS.md` and `docs/MOBILE_CAMERA.md`).
 
 ## Tests
 ```bash
@@ -28,7 +28,7 @@ createdb slabguard_test && pnpm --filter @slabguard/web test   # TEST_DATABASE_U
 | Web/API | Any Node host (container, Fly, Render, Vercel) | `pnpm --filter @slabguard/web build && start`. On serverless hosts set `INLINE_WORKER=0` and run the worker separately |
 | Worker | Same image, `pnpm worker` | scale horizontally (jobs use `FOR UPDATE SKIP LOCKED`); Power plan jobs get priority |
 | Vision | `services/vision/Dockerfile` | private network only; set `VISION_API_KEY` on both sides; 1–2 vCPU per worker |
-| DB/Auth/Storage | Supabase | run `pnpm db:migrate` with the direct connection string; create **private** bucket `slab-images`; enable "Confirm email", Google and Apple providers; add redirect URLs `https://<domain>/auth/callback`, `https://<domain>/reset-password`, `slabguard://` |
+| DB/Auth/Storage | Supabase | run `pnpm db:migrate` with the direct connection string; create **private** bucket `slab-images`; enable "Confirm email", Google and Apple providers; add redirect URLs `https://<domain>/auth/callback`, `https://<domain>/reset-password`, `slabguard://**` (staging project: `slabguard-staging://**`; see `docs/MOBILE_BUILDS.md`) |
 
 AUTH_MODE=dev is ignored when `NODE_ENV=production`.
 

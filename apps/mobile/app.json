@@ -16,20 +16,21 @@
     },
     "android": {
       "package": "com.slabguard.app",
-      "permissions": ["CAMERA", "com.android.vending.BILLING"]
+      "permissions": [
+        "CAMERA",
+        "com.android.vending.BILLING"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       "expo-apple-authentication",
-      ["expo-image-picker", { "cameraPermission": "SlabGuard uses the camera to photograph graded slabs for verification." }]
-    ],
-    "extra": {
-      "apiUrl": "https://YOUR-WEB-DOMAIN",
-      "supabaseUrl": "",
-      "supabaseAnonKey": "",
-      "revenuecatAppleKey": "",
-      "revenuecatGoogleKey": ""
-    }
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "SlabGuard uses the camera to photograph graded slabs for verification."
+        }
+      ]
+    ]
   }
 }

@@ -39,6 +39,10 @@ export default function Account() {
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: async () => { const r = await api("/api/account", { method: "DELETE", json: { confirm: "DELETE" } }); if (r.storeSubscriptionsNote) Alert.alert("Account deleted", r.storeSubscriptionsNote); await supabase.auth.signOut(); } },
       ])} />
+      {/* For bug reports (docs/MANUAL_TEST_PLAN.md): which build this is and where it points. */}
+      <View style={{ alignItems: "center" }}><T muted size={12}>
+        {`App ${config.appVersion}${config.variant !== "production" ? ` · ${config.variant} build` : ""}${config.variant !== "production" && config.apiUrl ? ` · ${config.apiUrl.replace(/^https?:\/\//, "")}` : ""}`}
+      </T></View>
     </ScrollView>
   );
 }

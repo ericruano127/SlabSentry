@@ -141,7 +141,7 @@ Run on a recent **and** an older phone, for each platform.
 
 | ID | Do | Expect |
 |---|---|---|
-| F1 ★ | Install the staging build, open it, sign in | Home shows your plan and history |
+| F1 ★ | Install **SlabGuard Staging** (`docs/MOBILE_BUILDS.md`), open it, sign in | Home shows your plan and history. Account's last line says "staging build" and the staging address |
 | F2 ★ | **Scan new slab** with the live camera | The camera opens. Hints change as you move and tilt. The box overlay lines up with the slab. It auto-captures when well lit and steady |
 | F3 | Deny camera permission the first time, then allow it in Settings | A clear explanation and a way to retry. No crash |
 | F4 | Backlit and UV shots; record a tilt video | They unlock and upload. The video is accepted (no sound recorded) |
