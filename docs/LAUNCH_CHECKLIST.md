@@ -18,7 +18,8 @@ Everything between now and a public launch, in rough order. Last updated 2026-11
 ## 1. Accounts and infrastructure
 | | Item | Owner | Details |
 |---|---|---|---|
-| 🟡 | Staging on Fly.io: apps, Postgres, Redis, secrets, GitHub `staging` environment | You | `docs/STAGING_FLY.md` (about 30 min) |
+| 🟡 | **Test environment on your own computer** (free): Docker Desktop, ngrok static domain, Supabase free project, `.env` | You | `docs/LOCAL_STAGING.md` (about 1 hour) |
+| ⬜ | Later, for always-on staging with automatic deploys: Fly.io apps, Postgres, Redis, secrets, GitHub `staging` environment | You | `docs/STAGING_FLY.md` |
 | 🟡 | Separate **staging Supabase** project (sign-in + photo storage); restrict sign-ups | You | `docs/STAGING_FLY.md` § Supabase |
 | 🟡 | Grafana Cloud stack, OTLP secrets on both apps, dashboard + alert rules imported, contact point | You | `docs/MONITORING.md` (about 15 min) |
 | 🟡 | Production on Fly.io: separate apps/DB/Redis (ideally a separate Fly org), custom domain + TLS | You | `docs/PRODUCTION_FLY.md` |

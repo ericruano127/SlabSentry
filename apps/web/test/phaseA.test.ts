@@ -8,7 +8,7 @@ import { invalidateLegalCache } from "../lib/consent";
 import { runRetention } from "../lib/retention";
 import { addImage } from "../lib/sessions";
 import { storage } from "../lib/storage";
-import { assertProductionReady } from "../lib/startup";
+import { assertProductionReady, isLocalDbHost } from "../lib/startup";
 import { stripExisting } from "../scripts/strip-existing-metadata";
 import { GET as sessionsGET } from "../app/api/sessions/route";
 import { GET as meGET } from "../app/api/me/route";
@@ -178,5 +178,9 @@ describe("production startup guard", () => {
     const all = problems.join(" | ");
     for (const p of ["AUTH_MODE=dev", "Supabase", "VISION_API_KEY", "sslmode=require", "pending legal review"]) expect(all).toContain(p);
     expect(await assertProductionReady({ NODE_ENV: "development" } as any)).toEqual([]);
+    // TLS is required over real networks; same-machine and Docker Compose service hosts are local.
+    for (const [url, local] of [["postgres://postgres@postgres:5432/slabguard", true], ["postgres://u@localhost/x", true], ["postgres://u@127.0.0.1:5432/x", true],
+      ["postgres://u@[::1]/x", true], ["postgres://u@db.example.com/x", false], ["postgres://u:localhost@db.example.com/x", false], ["postgres://u@10.0.0.5/x", false], ["not a url", false]] as const)
+      expect(isLocalDbHost(url), url).toBe(local);
   });
 });

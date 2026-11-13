@@ -14,10 +14,21 @@ export async function assertProductionReady(env = process.env): Promise<string[]
   if (!env.CERT_HASH_SECRET || env.CERT_HASH_SECRET.length < 32) problems.push("CERT_HASH_SECRET missing or shorter than 32 characters (cloned-cert index keys)");
   if (env.STRIPE_SECRET_KEY && !env.STRIPE_WEBHOOK_SECRET) problems.push("STRIPE_WEBHOOK_SECRET missing");
   if (env.REVENUECAT_SECRET_API_KEY && !env.REVENUECAT_WEBHOOK_AUTH) problems.push("REVENUECAT_WEBHOOK_AUTH missing");
-  if (!/sslmode=(require|verify-full)/.test(env.DATABASE_URL ?? "") && !/localhost|127\.0\.0\.1/.test(env.DATABASE_URL ?? "")) problems.push("DATABASE_URL must use sslmode=require (TLS in transit)");
+  if (!/sslmode=(require|verify-full)/.test(env.DATABASE_URL ?? "") && !isLocalDbHost(env.DATABASE_URL)) problems.push("DATABASE_URL must use sslmode=require (TLS in transit)");
   if (env.ALLOW_UNREVIEWED_LEGAL !== "1") {
     const pending = await q(`select kind, version from legal_documents where published and legal_review_status <> 'approved'`).catch(() => []);
     if (pending.length) problems.push(`legal documents pending legal review: ${pending.map((p) => `${p.kind}@${p.version}`).join(", ")}`);
   }
   return problems;
+}
+
+/**
+ * A database on the same machine or private container network, where TLS adds nothing: localhost, or a
+ * single-label host such as Docker Compose's `postgres` service. Anything with a dot (a real network
+ * hostname) must use TLS.
+ */
+export function isLocalDbHost(url?: string): boolean {
+  let host: string;
+  try { host = new URL(url ?? "").hostname.replace(/^\[|\]$/g, ""); } catch { return false; }
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || (!!host && !host.includes(".") && !host.includes(":"));
 }

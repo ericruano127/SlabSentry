@@ -2,6 +2,8 @@
 
 Staging runs the same images as production on Fly.io. After one-time setup, every push to `main` that passes CI deploys automatically.
 
+For a free test environment on your own computer instead, see `docs/LOCAL_STAGING.md`.
+
 ```
 Internet ──HTTPS──▶ slabsentry-staging-web  (Fly app)
                      ├─ process "app"    : Next.js web/API   (public, fly.dev)

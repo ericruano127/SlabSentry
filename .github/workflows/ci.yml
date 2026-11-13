@@ -173,3 +173,33 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: e2e-report, path: /tmp/e2e-out, retention-days: 7 }
+  compose:
+    # The one-command test environment (docker-compose.yml, docs/LOCAL_STAGING.md) builds, migrates and
+    # starts healthy in production mode, with placeholders for the outside services.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Settings (placeholders only; no real service is called)
+        run: |
+          cp local-staging.env.example .env
+          sed -i -e 's|^SUPABASE_URL=.*|SUPABASE_URL=https://example.supabase.co|' \
+                 -e 's|^SUPABASE_ANON_KEY=.*|SUPABASE_ANON_KEY=ci-placeholder|' \
+                 -e 's|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=ci-placeholder|' \
+                 -e 's|^VISION_API_KEY=.*|VISION_API_KEY=ci-vision-key-0123456789|' \
+                 -e 's|^CERT_HASH_SECRET=.*|CERT_HASH_SECRET=ci-cert-hash-secret-0123456789abcdef|' \
+                 -e 's|^APP_URL=.*|APP_URL=http://localhost:3000|' .env
+      - name: Build and start (migrations run first; waits for every health check)
+        run: docker compose up -d --build --wait --wait-timeout 900
+      - name: Smoke test
+        run: |
+          curl -fsS localhost:3000/api/health
+          curl -fsS localhost:3000/api/plans | grep -q '"pro"'
+          curl -fsSI localhost:3000/ | grep -qi "content-security-policy: .*nonce-"
+          test "$(docker compose ps --status running -q worker | wc -l)" = 2
+          test "$(docker compose ps -a --format '{{.Service}} {{.ExitCode}}' | grep '^migrate ')" = "migrate 0"
+          # only the web port is published, and only on this machine
+          test "$(docker compose ps --format '{{.Publishers}}' | grep -c 0.0.0.0)" = 0
+      - if: failure()
+        run: docker compose ps -a; docker compose logs --tail 80
+      - if: always()
+        run: docker compose down -v

@@ -1,43 +1,99 @@
-# Full local stack: docker compose up --build   (then: docker compose run --rm migrate)
+# The whole app on one computer: web, workers, image analysis, Postgres and Redis.
+#
+#   Test environment on your own computer, public through ngrok (docs/LOCAL_STAGING.md):
+#     docker compose --profile tunnel up -d --build
+#   Just on this computer (http://localhost:3000):
+#     docker compose up -d --build
+#
+# Settings come from a `.env` file next to this one (copy local-staging.env.example). Database migrations
+# run automatically before the web and worker containers start. Only the web port is published to this
+# computer; the database, Redis and image analysis stay on Docker's private network.
+
+x-webenv: &webenv
+  DATABASE_URL: postgres://postgres@postgres:5432/slabguard
+  REDIS_URL: redis://redis:6379
+  VISION_URL: http://vision:8001
+  VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}"
+  CERT_HASH_SECRET: "${CERT_HASH_SECRET:-change-me-local-only-0123456789abcdef}"
+  ALLOW_UNREVIEWED_LEGAL: "1"   # draft legal texts allowed: never set this in production
+  NEXT_PUBLIC_APP_URL: "${APP_URL:-http://localhost:3000}"
+  NEXT_PUBLIC_SUPABASE_URL: "${SUPABASE_URL:-}"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+  SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
+  SUPABASE_JWT_SECRET: "${SUPABASE_JWT_SECRET:-}"
+  ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
+  STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+  STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+  PSA_API_TOKEN: "${PSA_API_TOKEN:-}"
+  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+
+# The browser part of the site is built with these baked in, so changing them needs `--build`.
+x-webbuild: &webbuild
+  context: .
+  dockerfile: Dockerfile.web
+  args:
+    NEXT_PUBLIC_SUPABASE_URL: "${SUPABASE_URL:-}"
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+    NEXT_PUBLIC_APP_URL: "${APP_URL:-http://localhost:3000}"
+
 services:
   postgres:
     image: postgres:16
     environment: { POSTGRES_HOST_AUTH_METHOD: trust, POSTGRES_DB: slabguard }
     volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck: { test: ["CMD", "pg_isready"], interval: 5s, retries: 10 }
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "postgres"], interval: 5s, retries: 20 }
+    restart: unless-stopped
   redis:
     image: redis:7
-    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 10 }
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 20 }
+    restart: unless-stopped
   vision:
     build: ./services/vision
-    environment: { VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}" }
+    environment: { VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}", VISION_REQUIRE_KEY: "1" }
     deploy: { resources: { limits: { cpus: "2" } } }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
   migrate:
-    build: { context: ., dockerfile: Dockerfile.web }
+    build: *webbuild
     command: ["node_modules/.bin/tsx", "apps/web/scripts/migrate.ts"]
     working_dir: /app/apps/web
-    environment: &webenv
-      DATABASE_URL: postgres://postgres@postgres:5432/slabguard
-      REDIS_URL: redis://redis:6379
-      VISION_URL: http://vision:8001
-      VISION_API_KEY: "${VISION_API_KEY:-local-dev-vision-key}"
-      CERT_HASH_SECRET: "${CERT_HASH_SECRET:-change-me-local-only-0123456789abcdef}"
-      ALLOW_UNREVIEWED_LEGAL: "1"
-      NEXT_PUBLIC_SUPABASE_URL: "${NEXT_PUBLIC_SUPABASE_URL:-}"
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
-      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-}"
+    environment: *webenv
     depends_on: { postgres: { condition: service_healthy } }
-    profiles: [tools]
+    restart: "no"
   web:
-    build: { context: ., dockerfile: Dockerfile.web }
+    build: *webbuild
     environment: { <<: *webenv, INLINE_WORKER: "0" }
-    ports: ["3000:3000"]
-    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, vision: { condition: service_started } }
+    ports: ["127.0.0.1:3000:3000"]   # this computer only; the public way in is the tunnel
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      vision: { condition: service_healthy }
+    restart: unless-stopped
   worker:
-    build: { context: ., dockerfile: Dockerfile.web }
+    build: *webbuild
     # preload = OpenTelemetry for ES modules (no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set)
     command: ["node", "--import", "./apps/web/scripts/otel-preload.mjs", "--import", "./apps/web/node_modules/tsx/dist/loader.mjs", "apps/web/scripts/worker.ts"]
     environment: *webenv
-    depends_on: { postgres: { condition: service_healthy }, vision: { condition: service_started } }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      vision: { condition: service_healthy }
     deploy: { replicas: 2 }
+    restart: unless-stopped
+  tunnel:
+    # Public https address through ngrok's free fixed domain. Only the web container is reachable.
+    image: ngrok/ngrok:3
+    profiles: [tunnel]
+    command: ["http", "--url=${NGROK_DOMAIN:-missing-NGROK_DOMAIN-in-.env}", "web:3000"]
+    environment: { NGROK_AUTHTOKEN: "${NGROK_AUTHTOKEN:-}" }
+    depends_on: { web: { condition: service_healthy } }
+    restart: unless-stopped
 volumes: { pgdata: {} }

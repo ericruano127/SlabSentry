@@ -22,7 +22,7 @@ The automated suites (`docs/TESTING.md`) already check the logic on every push. 
 
 ## Before you start
 **Environment:**
-- Staging deployed (`docs/STAGING_FLY.md`).
+- Staging running: on your own computer (`docs/LOCAL_STAGING.md`, free) or on Fly.io (`docs/STAGING_FLY.md`).
 - The staging Supabase project has email sign-in plus Google and Apple sign-in configured, with staging redirect URLs.
 - Stripe is in **test mode**, with its keys on staging.
 - RevenueCat is connected to the App Store sandbox and Google Play test tracks.

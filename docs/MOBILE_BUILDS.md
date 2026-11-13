@@ -38,7 +38,7 @@ The app config is dynamic, so `eas init` may ask you to add the project ID yours
 
 | Variable | Staging (preview) | Production |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | `https://slabsentry-staging-web.fly.dev` (or your staging domain) | Your production domain |
+| `EXPO_PUBLIC_API_URL` | Your staging address: the ngrok domain (`docs/LOCAL_STAGING.md`) or `https://slabsentry-staging-web.fly.dev` | Your production domain |
 | `EXPO_PUBLIC_SUPABASE_URL` | The **staging** Supabase project URL | The production project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Staging project's anon (publishable) key | Production anon key |
 | `EXPO_PUBLIC_RC_APPLE_KEY`, `EXPO_PUBLIC_RC_GOOGLE_KEY` | Optional: RevenueCat **public** SDK keys for sandbox purchases. Without them the plans screen shows no store plans | **Required** |

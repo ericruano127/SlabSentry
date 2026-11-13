@@ -1,0 +1,8 @@
+# Keep Unix line endings on every platform (Windows checkouts included): files are copied into Linux
+# Docker images, where Windows line endings break scripts.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.ico binary
