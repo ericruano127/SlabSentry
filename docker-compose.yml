@@ -59,8 +59,8 @@ services:
     restart: unless-stopped
   migrate:
     build: *webbuild
-    command: ["node_modules/.bin/tsx", "apps/web/scripts/migrate.ts"]
-    working_dir: /app/apps/web
+    # Same command as Fly's release_command (tsx is installed under apps/web, not at the root)
+    command: ["node", "--import", "./apps/web/node_modules/tsx/dist/loader.mjs", "apps/web/scripts/migrate.ts"]
     environment: *webenv
     depends_on: { postgres: { condition: service_healthy } }
     restart: "no"

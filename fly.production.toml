@@ -10,7 +10,7 @@ kill_timeout = "30s"               # workers finish the analysis in progress (gr
   dockerfile = "Dockerfile.web"
 
 [deploy]
-  release_command = "sh -c 'DATABASE_URL=${DIRECT_DATABASE_URL:-$DATABASE_URL} node_modules/.bin/tsx apps/web/scripts/migrate.ts'"
+  release_command = "sh -c 'DATABASE_URL=${DIRECT_DATABASE_URL:-$DATABASE_URL} node --import ./apps/web/node_modules/tsx/dist/loader.mjs apps/web/scripts/migrate.ts'"
   release_command_timeout = "5m"
   # ★ Blue-green: new Machines boot next to the old ones and take traffic only after ALL pass their health
   #   checks; if any fail, the old release keeps serving. Migrations must be backwards-compatible
