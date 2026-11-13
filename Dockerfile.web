@@ -20,7 +20,9 @@ COPY . .
 RUN pnpm --filter @slabguard/web build
 
 FROM node:22-slim AS runtime
-ENV NODE_ENV=production PORT=3000
+# HOSTNAME: the Next.js server listens on this address. Docker and Fly set HOSTNAME to the container/machine
+# id, which would make it answer only on that address (not localhost, so health checks fail).
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 RUN groupadd -r app && useradd -r -g app app
 # standalone server + static assets (serve /_next/static via CDN in front of this)
