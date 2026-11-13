@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { pool, q } from "../lib/db";
 import { consumeCredit, releaseCredit, reserveCredit, usageSummary } from "../lib/credits";
-import { applyStripeEvent, createCheckout, stripe } from "../lib/billing/stripe";
+import { applyStripeEvent, createCheckout, stripe, STRIPE_API_VERSION } from "../lib/billing/stripe";
 import { applyRevenueCatEvent, reconcileRevenueCat } from "../lib/billing/revenuecat";
 import { drainJobs, enqueueAnalysis } from "../lib/jobs";
 import { HttpError } from "../lib/http";
@@ -187,6 +187,47 @@ describe("subscriptions", () => {
     await applyStripeEvent(stripeEvent("invoice.paid", { id: "in_1" + u.slice(0, 4), customer: "cus_x", amount_paid: 999, currency: "usd" }, new Date()));
     await applyStripeEvent(stripeEvent("charge.refunded", { id: "ch_1", invoice: "in_1" + u.slice(0, 4), amount: 999, amount_refunded: 999, currency: "usd" }, new Date()));
     expect((await q(`select status from payments where provider_payment_id=$1`, ["in_1" + u.slice(0, 4)]))[0].status).toBe("refunded");
+  });
+
+  it("current API shape: refunds update the invoice payment found through the PaymentIntent (no double revenue)", async () => {
+    const u = await newUser();
+    const inv = "in_2" + u.slice(0, 6), pi = "pi_2" + u.slice(0, 6);
+    const finder = async (id: string) => (id === pi ? inv : null);
+    await applyStripeEvent(stripeEvent("invoice.paid", { id: inv, customer: "cus_x", amount_paid: 999, currency: "usd", parent: { subscription_details: { subscription: "sub_x" } } }, new Date()));
+    // Charges no longer carry `invoice`; only the PaymentIntent links them to it.
+    await applyStripeEvent(stripeEvent("charge.refunded", { id: "ch_2" + u.slice(0, 6), payment_intent: pi, amount: 999, amount_refunded: 999, currency: "usd" }, new Date()), undefined, finder);
+    const rows = await q(`select provider_payment_id, status, amount_cents, refunded_cents from payments where provider_payment_id in ($1,$2)`, [inv, "ch_2" + u.slice(0, 6)]);
+    expect(rows).toEqual([{ provider_payment_id: inv, status: "refunded", amount_cents: 999, refunded_cents: 999 }]);
+  });
+
+  it("current API shape: a charge with no invoice is recorded under the charge", async () => {
+    const id = "ch_3" + Math.random().toString(36).slice(2, 8);
+    await applyStripeEvent(stripeEvent("charge.refunded", { id, payment_intent: "pi_none", amount: 500, amount_refunded: 200, currency: "usd" }, new Date()), undefined, async () => null);
+    expect((await q(`select status, refunded_cents from payments where provider_payment_id=$1`, [id]))[0]).toEqual({ status: "partially_refunded", refunded_cents: 200 });
+  });
+
+  it("current API shape: disputes update the original payment; lost and prevented count as money returned", async () => {
+    for (const [outcome, status, refunded] of [["lost", "dispute_lost", 999], ["prevented", "dispute_lost", 999], ["won", "dispute_won", 0], ["warning_closed", "dispute_won", 0]] as const) {
+      const tag = Math.random().toString(36).slice(2, 8), inv = "in_d" + tag, pi = "pi_d" + tag;
+      const finder = async (id: string) => (id === pi ? inv : null);
+      await applyStripeEvent(stripeEvent("invoice.paid", { id: inv, customer: "cus_x", amount_paid: 999, currency: "usd" }, new Date()));
+      const dispute = { id: "dp_" + tag, charge: "ch_d" + tag, payment_intent: pi, amount: 999, currency: "usd", status: "needs_response" };
+      await applyStripeEvent(stripeEvent("charge.dispute.created", dispute, new Date()), undefined, finder);
+      expect((await q(`select status from payments where provider_payment_id=$1`, [inv]))[0].status).toBe("disputed");
+      await applyStripeEvent(stripeEvent("charge.dispute.closed", { ...dispute, status: outcome }, new Date()), undefined, finder);
+      const rows = await q(`select provider_payment_id, status, amount_cents, refunded_cents from payments where provider_payment_id like $1`, ["%" + tag]);
+      expect(rows, outcome).toEqual([{ provider_payment_id: inv, status, amount_cents: 999, refunded_cents: refunded }]); // one row: no extra revenue
+    }
+  });
+
+  it("current API shape: if Stripe can't be reached to find the invoice, the event fails so Stripe redelivers it", async () => {
+    const evt = stripeEvent("charge.refunded", { id: "ch_4" + Math.random().toString(36).slice(2, 8), payment_intent: "pi_4", amount: 999, amount_refunded: 999, currency: "usd" }, new Date());
+    await expect(applyStripeEvent(evt, undefined, async () => { throw new Error("ECONNRESET"); })).rejects.toThrow();
+    expect((await applyStripeEvent(evt, undefined, async () => null)).status).toBe("processed");
+  });
+
+  it("pins the Stripe API version the webhook endpoint must use", () => {
+    expect(STRIPE_API_VERSION).toBe("2026-10-28.endive");
   });
 
   it("degrades gracefully when the billing provider is down", async () => {

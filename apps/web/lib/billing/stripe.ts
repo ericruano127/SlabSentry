@@ -6,10 +6,38 @@ import { loadSubscriptions } from "../credits";
 import { processBillingEvent, recordPayment, upsertSubscription, type SubscriptionUpsert } from "./subscriptions";
 import { subscriptionGrantsAccess } from "@slabguard/core";
 
+/**
+ * The Stripe API version the app speaks. Pinned explicitly so a library upgrade can't change it silently
+ * (a new stripe package pins a different version and this line stops type-checking). Create the webhook
+ * endpoint with the SAME version in the Stripe dashboard: events arrive in the endpoint's version.
+ */
+export const STRIPE_API_VERSION = "2026-10-28.endive" as const;
+
 let client: Stripe | null = null;
 export function stripe(): Stripe {
   if (!env.stripeSecret) throw new HttpError(503, "billing_not_configured", "Web billing is not configured yet.");
-  return (client ??= new Stripe(env.stripeSecret, { maxNetworkRetries: 2, timeout: 15_000 }));
+  return (client ??= new Stripe(env.stripeSecret, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2, timeout: 15_000 }));
+}
+
+/** Finds the invoice a PaymentIntent paid (charges and disputes no longer carry the invoice id). */
+export type InvoiceFinder = (paymentIntentId: string) => Promise<string | null>;
+const findInvoiceViaApi: InvoiceFinder = async (pi) => {
+  const r = await stripe().invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 });
+  const inv = r.data[0]?.invoice;
+  return typeof inv === "string" ? inv : inv?.id ?? null;
+};
+const idOf = (x: unknown): string | null => (typeof x === "string" ? x : (x as { id?: string } | null)?.id ?? null);
+
+/**
+ * The `payments` row a charge or dispute belongs to. Subscription payments are recorded under their invoice id
+ * (invoice.paid), so resolve the invoice: from the object itself on older API versions, else through the
+ * PaymentIntent. An API failure throws, so Stripe redelivers the event; only "no invoice" falls back.
+ */
+async function paymentRowId(o: any, fallback: string, findInvoice: InvoiceFinder): Promise<string> {
+  const direct = idOf(o.invoice);
+  if (direct) return direct;
+  const pi = idOf(o.payment_intent);
+  return (pi && (await findInvoice(pi))) || fallback;
 }
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
@@ -107,7 +135,7 @@ export async function handleStripeWebhook(rawBody: string, signature: string | n
 }
 
 /** Separated from signature verification so it can be exercised with mocked events. */
-export async function applyStripeEvent(event: Stripe.Event, fetchSubscription?: (id: string) => Promise<Stripe.Subscription>) {
+export async function applyStripeEvent(event: Stripe.Event, fetchSubscription?: (id: string) => Promise<Stripe.Subscription>, findInvoice: InvoiceFinder = findInvoiceViaApi) {
   return processBillingEvent("stripe", event.id, event.type, event, async () => {
     const o = event.data.object as any;
     switch (event.type) {
@@ -140,7 +168,7 @@ export async function applyStripeEvent(event: Stripe.Event, fetchSubscription?: 
         return;
       }
       case "charge.refunded": {
-        const pid = (o.invoice as string) ?? o.id;
+        const pid = await paymentRowId(o, o.id, findInvoice);
         const full = o.amount_refunded >= o.amount;
         await recordPayment({ userId: null, provider: "stripe", providerPaymentId: pid, amountCents: o.amount, refundedCents: o.amount_refunded, currency: o.currency, status: full ? "refunded" : "partially_refunded" });
         // Access follows the Stripe subscription state: the refund runbook cancels the subscription, which arrives as subscription.deleted.
@@ -148,9 +176,15 @@ export async function applyStripeEvent(event: Stripe.Event, fetchSubscription?: 
       }
       case "charge.dispute.created":
       case "charge.dispute.closed": {
-        const status = event.type === "charge.dispute.created" ? "disputed" : o.status === "won" ? "dispute_won" : "dispute_lost";
-        await one(`update payments set status=$2 where provider='stripe' and provider_payment_id=$1`, [o.payment_intent ?? o.charge, status]);
-        await recordPayment({ userId: null, provider: "stripe", providerPaymentId: `dispute:${o.id}`, amountCents: o.amount, currency: o.currency, status });
+        // won / warning_closed: the money stays. lost / prevented (refunded before it became a dispute): it went back.
+        const lost = event.type === "charge.dispute.closed" && (o.status === "lost" || o.status === "prevented");
+        const status = event.type === "charge.dispute.created" ? "disputed" : lost ? "dispute_lost" : "dispute_won";
+        const pid = await paymentRowId(o, idOf(o.charge) ?? `dispute:${o.id}`, findInvoice);
+        const updated = await one(
+          `update payments set status=$2, refunded_cents=case when $3 then greatest(refunded_cents, amount_cents) else refunded_cents end
+            where provider='stripe' and provider_payment_id=$1 returning id`, [pid, status, lost]);
+        // No payment on record (e.g. its invoice event hasn't arrived): note the dispute without adding revenue.
+        if (!updated) await recordPayment({ userId: null, provider: "stripe", providerPaymentId: pid, amountCents: 0, refundedCents: 0, currency: o.currency, status });
         return;
       }
       default:

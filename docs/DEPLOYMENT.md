@@ -55,8 +55,11 @@ See `docs/STAGING_FLY.md`. It covers `fly.staging.toml`, `services/vision/fly.st
 1. Create products/prices matching `config/plans.json` price ids; set `STRIPE_PRICE_PRO_MONTH` etc. (or edit in Admin → Plans) and re-run migrate with `PLANS_FORCE_SYNC=1` on first setup.
 2. Customer Portal: allow plan switching between these prices (upgrades prorated immediately; schedule downgrades at period end) and cancellation at period end.
 3. Webhook → `https://<domain>/api/webhooks/stripe`, events: `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`. Set `STRIPE_WEBHOOK_SECRET`.
+   - **API version:** create the webhook endpoint with API version **`2026-10-28.endive`**, the version the app pins (`STRIPE_API_VERSION` in `apps/web/lib/billing/stripe.ts`). Events arrive in the endpoint's version, not the app's. The handler also accepts older shapes, but matching versions avoids surprises.
+   - **Upgrading the `stripe` package:** a new major version pins a newer API version, and `STRIPE_API_VERSION` then stops type-checking. Read Stripe's API changelog for the versions in between, update the constant, run the billing tests, and create a new webhook endpoint at the new version (Stripe lets you run both during the switch).
 4. Refund runbook: refund + cancel the subscription in Stripe; access ends via `customer.subscription.deleted`.
-5. Test with Stripe test mode + `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+5. Test with Stripe test mode + `stripe listen --forward-to localhost:3000/api/webhooks/stripe` (the CLI forwards events in your account's default API version unless you pass `--latest`).
+6. Refunds and disputes are matched to the invoice payment through the PaymentIntent (Stripe's invoice-payments list), so the staff unit-economics page counts each payment once.
 
 ### App Store / Google Play via RevenueCat
 1. Create auto-renewable subscriptions with ids from `config/plans.json` (`slabguard.pro.monthly`, … / Play `slabguard_pro:monthly` = subscription:base-plan).
